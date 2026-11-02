@@ -25,10 +25,20 @@ Diagnostics with the FRED exchange rate, 2010-01-04 to 2026-10-23:
 | `same_day` | 3,975 | 6.65% | 6.44% | 2.24% | -0.436 |
 | `prev_ny` | 4,107 | 6.54% | 6.30% | 1.97% | -0.452 |
 
-Daily changes have an autocorrelation of about -0.44 under both definitions, a
+Daily changes have an autocorrelation of -0.44 to -0.45 under both definitions, a
 sign of measurement noise: a gap caused by asynchrony reverses the next day. It is
 unchanged by the FX source (-0.441 and -0.453 with cleaned Yahoo data), so this
 noise comes from the non-synchronous closes and not from the exchange rate.
+
+`prev_ny` is the reference definition:
+
+1. It is the only one observable in real time at the Taipei close, when the previous
+   NY close is already known, so the only one usable without look-ahead in a
+   backtest executed at the Taipei close.
+2. It is less noisy: the daily change std is 1.97%, against 2.24% for `same_day`.
+3. Its time gap is shorter: about 8.5 hours, against about 15 hours.
+
+`same_day` is kept as a robustness check.
 
 ## Data
 - Prices: daily unadjusted closes from Yahoo Finance via `yfinance` (unofficial
@@ -53,8 +63,9 @@ since 2017. From 2013 to 2016 this includes nine persistent shifts of 10 to 48
 consecutive dates at about -2.5%, such as 2013-09-09 to 2013-11-18. A rolling median
 cannot detect them, since the neighbouring values are shifted too: only 87 of the
 406 dates with a gap above 1% are flagged by the 2% rule on Yahoo's own series.
-FRED shows the same move on just 1 of the 124 flagged dates, and the rule flags
-none of FRED's own values.
+Of the 124 flagged dates, 115 can be compared directly (9 have no FRED value on that
+day), and FRED shows the same move on just 1 of them. The rule flags none of FRED's
+own values.
 
 ![Relative gap between Yahoo TWD=X and FRED DEXTAUS](figures/fx_yahoo_vs_fred.png)
 
