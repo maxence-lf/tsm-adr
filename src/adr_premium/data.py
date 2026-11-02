@@ -10,12 +10,15 @@ Limites à documenter dans le README :
 """
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
+from urllib.request import urlopen
 
 import pandas as pd
 
 TICKERS = {"adr": "TSM", "local": "2330.TW", "fx": "TWD=X"}
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+FRED_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DEXTAUS"
 
 
 def download(start: str = "2010-01-01", end: str | None = None, refresh: bool = False) -> pd.DataFrame:
@@ -39,3 +42,26 @@ def download(start: str = "2010-01-01", end: str | None = None, refresh: bool = 
     DATA_DIR.mkdir(exist_ok=True)
     raw.to_csv(cache)
     return raw
+
+
+def read_fred_csv(source) -> pd.Series:
+    """Parse a FRED CSV (date, value) into a float series; "." and blanks become NaN."""
+    df = pd.read_csv(source, na_values=["."], index_col=0, parse_dates=True)
+    fx = pd.to_numeric(df.iloc[:, 0]).astype(float).sort_index()
+    fx.index.name = "date"
+    fx.name = "fx_fred"
+    return fx
+
+
+def download_fred_fx(refresh: bool = False) -> pd.Series:
+    """Return DEXTAUS (Fed H.10, TWD per USD, noon New York), cached in CSV."""
+    cache = DATA_DIR / "fx_fred.csv"
+    if cache.exists() and not refresh:
+        return read_fred_csv(cache)
+
+    with urlopen(FRED_URL, timeout=60) as response:
+        payload = response.read()
+    fx = read_fred_csv(BytesIO(payload))  # parse first: a bad response must not be cached
+    DATA_DIR.mkdir(exist_ok=True)
+    cache.write_bytes(payload)
+    return fx
