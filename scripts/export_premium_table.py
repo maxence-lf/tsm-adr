@@ -11,8 +11,8 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from adr_premium.clean import clean_fx, flag_fx, print_fx_report
-from adr_premium.data import download
+from adr_premium.clean import prepare_fred_fx, print_fill_report
+from adr_premium.data import download, download_fred_fx
 from adr_premium.premium import premium_prev_ny, premium_same_day
 
 OUTLIER_JUMP = 10.0  # percentage points of daily change flagged as suspicious
@@ -20,10 +20,10 @@ OUTLIER_JUMP = 10.0  # percentage points of daily change flagged as suspicious
 
 def main() -> None:
     raw = download()
-    fx, removed = clean_fx(raw["fx"])
-    print_fx_report(removed, flag_fx(fx))
+    fx, filled = prepare_fred_fx(download_fred_fx(), raw.index[0])
     same = premium_same_day(raw["adr"], raw["local"], fx)
     prev = premium_prev_ny(raw["adr"], raw["local"], fx)
+    print_fill_report(filled, same, prev)
 
     table = pd.DataFrame({
         "premium_same_day_pct": same["premium"] * 100,   # blue line
@@ -32,7 +32,8 @@ def main() -> None:
         "adr_same_day": same["adr"],
         "adr_prev_ny": prev["adr"],
         "local": prev["local"],
-        "fx": prev["fx"],
+        "fx_same_day": same["fx"],
+        "fx_prev_ny": prev["fx"],
     })
     table.index.name = "date"
     table["gap_pct_points"] = table["premium_same_day_pct"] - table["premium_prev_ny_pct"]

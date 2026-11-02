@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from adr_premium.clean import fill_fx
 from adr_premium.premium import premium_prev_ny, premium_same_day
 
 
@@ -32,7 +33,7 @@ def test_known_premium_value():
 def test_prev_ny_uses_strictly_previous_ny_date():
     # Lundi Taipei doit utiliser la clôture NY du vendredi précédent, pas celle du lundi.
     local = _s(["2026-03-06", "2026-03-09"], [1000.0, 1000.0])          # ven, lun
-    fx = _s(["2026-03-06", "2026-03-09"], [32.0, 32.0])
+    fx = _s(["2026-03-05", "2026-03-06"], [32.0, 32.0])
     adr = _s(["2026-03-05", "2026-03-06", "2026-03-09"], [150.0, 160.0, 999.0])
     out = premium_prev_ny(adr, local, fx)
     assert out.loc["2026-03-06", "adr"] == 150.0   # jeu.
@@ -42,7 +43,7 @@ def test_prev_ny_uses_strictly_previous_ny_date():
 def test_prev_ny_drops_long_gaps():
     # Pas de cotation NY pendant > 5 jours : la date Taipei doit être exclue.
     local = _s(["2026-03-20"], [1000.0])
-    fx = _s(["2026-03-20"], [32.0])
+    fx = _s(["2026-03-02"], [32.0])
     adr = _s(["2026-03-02"], [150.0])
     assert premium_prev_ny(adr, local, fx).empty
 
@@ -52,3 +53,44 @@ def test_same_day_ignores_non_common_holidays():
     fx = _s(["2026-03-02", "2026-03-03"], [32.0, 32.0])
     adr = _s(["2026-03-02"], [160.0])  # NY fermé le 03
     assert list(premium_same_day(adr, local, fx).index) == [pd.Timestamp("2026-03-02")]
+
+
+def test_prev_ny_takes_fx_on_adr_date():
+    local = _s(["2026-03-09"], [1000.0])                                # Monday
+    adr = _s(["2026-03-06"], [160.0])                                   # Friday
+    fx = _s(["2026-03-06", "2026-03-09"], [31.0, 33.0])
+    out = premium_prev_ny(adr, local, fx)
+    assert out.loc["2026-03-09", "fx"] == 31.0
+    assert out.loc["2026-03-09", "premium"] == pytest.approx(160.0 * 31.0 / 5000.0 - 1)
+
+
+def test_prev_ny_can_keep_fx_on_taipei_date():
+    local = _s(["2026-03-09"], [1000.0])
+    adr = _s(["2026-03-06"], [160.0])
+    fx = _s(["2026-03-06", "2026-03-09"], [31.0, 33.0])
+    assert premium_prev_ny(adr, local, fx, fx_on_adr_date=False).loc["2026-03-09", "fx"] == 33.0
+
+
+def test_prev_ny_drops_day_without_fx_on_adr_date():
+    local = _s(["2026-03-09"], [1000.0])
+    adr = _s(["2026-03-06"], [160.0])
+    assert premium_prev_ny(adr, local, _s(["2026-03-09"], [33.0])).empty
+
+
+def test_fx_is_never_later_than_the_adr_date():
+    # Every rate after a given date is absurdly high: any look-ahead would show up.
+    days = pd.bdate_range("2026-03-02", "2026-03-20")
+    adr = pd.Series(160.0, index=days)
+    local = pd.Series(1000.0, index=days)
+    for cutoff in days[1:-1]:
+        fx = pd.Series(32.0, index=days)
+        fx[fx.index > cutoff] = 999.0
+        fx[cutoff] = np.nan  # the rate of the cutoff date itself is missing and filled
+        filled, _ = fill_fx(fx)
+
+        same = premium_same_day(adr, local, filled)
+        assert (same.loc[:cutoff, "fx"] == 32.0).all()
+
+        prev = premium_prev_ny(adr, local, filled)
+        assert (prev[prev["adr_date"] <= cutoff]["fx"] == 32.0).all()
+        assert (prev["fx"] == filled.reindex(prev["adr_date"]).to_numpy()).all()

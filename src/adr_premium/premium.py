@@ -15,6 +15,11 @@ Deux définitions sont donc calculées :
 
 Aucune des deux n'est synchrone. Comparer leurs propriétés (volatilité des
 variations quotidiennes, autocorrélation) mesure le bruit dû à l'asynchronie.
+
+FX alignment: the rate is taken on the NY date of the ADR used, so it is never
+later than the ADR price. same_day uses the FRED rate of day d, prev_ny the FRED
+rate of ``adr_date`` (the previous NY session). FRED (DEXTAUS) is recorded at noon
+New York time, 4 hours before the ADR close.
 """
 from __future__ import annotations
 
@@ -44,11 +49,14 @@ def premium_same_day(adr_usd: pd.Series, local_twd: pd.Series, usdtwd: pd.Series
 
 
 def premium_prev_ny(adr_usd: pd.Series, local_twd: pd.Series, usdtwd: pd.Series,
-                    ratio: int = ADR_RATIO) -> pd.DataFrame:
+                    ratio: int = ADR_RATIO, fx_on_adr_date: bool = True) -> pd.DataFrame:
     """Prime avec, pour chaque date Taipei d, la dernière clôture NY strictement avant d.
 
     L'ADR utilisé est indexé par la date Taipei. La date NY effectivement utilisée
     est conservée dans la colonne ``adr_date`` pour audit.
+
+    The FX rate is read on ``adr_date``. ``fx_on_adr_date=False`` reads it on the
+    Taipei date instead, which reproduces the earlier Yahoo-based version.
     """
     local = _as_series(local_twd, "local").to_frame()
     fx = _as_series(usdtwd, "fx")
@@ -64,7 +72,9 @@ def premium_prev_ny(adr_usd: pd.Series, local_twd: pd.Series, usdtwd: pd.Series,
         adr_shifted.reset_index(names="date"),
         on="date", direction="backward",
     ).set_index("date")
-    df = df.join(fx, how="inner").dropna(subset=["adr", "local", "fx"])
+    fx_dates = pd.DatetimeIndex(df["adr_date"]) if fx_on_adr_date else df.index
+    df["fx"] = fx.reindex(fx_dates).to_numpy()
+    df = df.dropna(subset=["adr", "local", "fx"])
 
     # Écart max toléré entre date Taipei et date NY utilisée (week-ends, fériés).
     gap = (df.index - pd.DatetimeIndex(df["adr_date"])).days
