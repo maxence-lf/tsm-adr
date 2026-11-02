@@ -6,3 +6,5 @@ data/*.csv
 .DS_Store
 .idea/
 .pytest_cache/
+notes/
+note_de_suivi.txt

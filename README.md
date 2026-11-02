@@ -23,6 +23,10 @@ Daily unadjusted closes from Yahoo Finance via `yfinance` (unofficial API):
 TSM (USD), 2330.TW (TWD), TWD=X (USD/TWD). Raw data is not redistributed.
 
 ## Reproduce
+Requires Python 3.12.
+
+    python3.12 -m venv .venv
+    source .venv/bin/activate
     pip install -r requirements.txt
     pytest -q
     python scripts/build_premium.py
