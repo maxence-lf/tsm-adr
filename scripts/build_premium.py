@@ -1,6 +1,6 @@
 """Étape 1 : télécharge les données, construit la prime (2 définitions), sauvegarde et trace.
 
-Usage : python scripts/build_premium.py [--refresh] [--start 2010-01-01]
+Usage : python scripts/build_premium.py [--refresh] [--start 2010-01-01] [--no-clean]
 """
 import argparse
 import sys
@@ -13,6 +13,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from adr_premium.clean import clean_fx, flag_fx, print_fx_report
 from adr_premium.data import download
 from adr_premium.premium import asynchrony_diagnostics, premium_prev_ny, premium_same_day
 
@@ -21,14 +22,24 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--refresh", action="store_true")
     ap.add_argument("--start", default="2010-01-01")
+    ap.add_argument("--no-clean", action="store_true",
+                    help="chart the raw FX series, to reproduce the 'before' figure")
     args = ap.parse_args()
 
     raw = download(start=args.start, refresh=args.refresh)
-    same = premium_same_day(raw["adr"], raw["local"], raw["fx"])
-    prev = premium_prev_ny(raw["adr"], raw["local"], raw["fx"])
+    if args.no_clean:
+        fx = raw["fx"]
+        print("FX cleaning disabled")
+    else:
+        fx, removed = clean_fx(raw["fx"])
+        print_fx_report(removed, flag_fx(fx))
+    same = premium_same_day(raw["adr"], raw["local"], fx)
+    prev = premium_prev_ny(raw["adr"], raw["local"], fx)
 
-    same.to_csv(ROOT / "data" / "premium_same_day.csv")
-    prev.to_csv(ROOT / "data" / "premium_prev_ny.csv")
+    # --no-clean only reproduces the figure: the premium CSVs always hold cleaned data.
+    if not args.no_clean:
+        same.to_csv(ROOT / "data" / "premium_same_day.csv")
+        prev.to_csv(ROOT / "data" / "premium_prev_ny.csv")
 
     diag = asynchrony_diagnostics(same, prev)
     print("\nDiagnostic d'asynchronie\n", diag.round(4).to_string())
@@ -43,7 +54,8 @@ def main() -> None:
     ax.legend(frameon=False)
     ax.grid(alpha=0.3)
     fig.tight_layout()
-    out = ROOT / "figures" / "premium_history.png"
+    name = "premium_raw_with_fx_errors.png" if args.no_clean else "premium_history.png"
+    out = ROOT / "figures" / name
     fig.savefig(out, dpi=150)
     print(f"Graphique : {out}")
 
