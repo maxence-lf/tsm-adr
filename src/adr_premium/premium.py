@@ -1,20 +1,20 @@
-"""Construction de la prime ADR / action locale.
+"""Construction of the ADR / local share premium.
 
-Convention : prime = prix ADR (USD) / (ratio * prix local (TWD) / USDTWD) - 1
+Convention: premium = ADR price (USD) / (ratio * local price (TWD) / USDTWD) - 1
 
-Problème central : Taipei clôture à 13:30 heure de Taipei (05:30 UTC),
-New York à 16:00 heure de New York (20:00 ou 21:00 UTC selon l'heure d'été).
-Les deux clôtures d'une même date calendaire sont séparées d'environ 15 h :
-la clôture new-yorkaise intègre de l'information que Taipei n'a pas encore vue.
+Central issue: Taipei closes at 13:30 Taipei time (05:30 UTC), New York at 16:00
+New York time (20:00 or 21:00 UTC depending on daylight saving time).
+The two closes of the same calendar date are about 15 hours apart: the New York
+close includes information that Taipei has not seen yet.
 
-Deux définitions sont donc calculées :
-- ``same_day``   : clôture NY du jour d  vs clôture Taipei du jour d  (écart ~15 h,
-                   NY "en avance" sur Taipei)
-- ``prev_ny``    : clôture NY du dernier jour de bourse NY strictement antérieur à d
-                   vs clôture Taipei du jour d (écart ~8,5 h, Taipei "en avance")
+Two definitions are therefore computed:
+- ``same_day``   : NY close of day d vs Taipei close of day d (gap ~15 h,
+                   NY "ahead" of Taipei)
+- ``prev_ny``    : NY close of the last NY trading day strictly before d
+                   vs Taipei close of day d (gap ~8.5 h, Taipei "ahead")
 
-Aucune des deux n'est synchrone. Comparer leurs propriétés (volatilité des
-variations quotidiennes, autocorrélation) mesure le bruit dû à l'asynchronie.
+Neither is synchronous. Comparing their properties (volatility of daily changes,
+autocorrelation) measures the noise caused by asynchrony.
 
 FX alignment: the rate is taken on the NY date of the ADR used, so it is never
 later than the ADR price. same_day uses the FRED rate of day d, prev_ny the FRED
@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-ADR_RATIO = 5  # 1 ADR TSM = 5 actions ordinaires 2330.TW
+ADR_RATIO = 5  # 1 TSM ADR = 5 ordinary 2330.TW shares
 
 
 def _as_series(s: pd.Series, name: str) -> pd.Series:
@@ -38,7 +38,7 @@ def _as_series(s: pd.Series, name: str) -> pd.Series:
 
 def premium_same_day(adr_usd: pd.Series, local_twd: pd.Series, usdtwd: pd.Series,
                      ratio: int = ADR_RATIO) -> pd.DataFrame:
-    """Prime avec les clôtures de la même date calendaire (jours communs uniquement)."""
+    """Premium from the closes of the same calendar date (common days only)."""
     df = pd.concat(
         [_as_series(adr_usd, "adr"), _as_series(local_twd, "local"), _as_series(usdtwd, "fx")],
         axis=1, join="inner",
@@ -50,10 +50,10 @@ def premium_same_day(adr_usd: pd.Series, local_twd: pd.Series, usdtwd: pd.Series
 
 def premium_prev_ny(adr_usd: pd.Series, local_twd: pd.Series, usdtwd: pd.Series,
                     ratio: int = ADR_RATIO, fx_on_adr_date: bool = True) -> pd.DataFrame:
-    """Prime avec, pour chaque date Taipei d, la dernière clôture NY strictement avant d.
+    """Premium with, for each Taipei date d, the last NY close strictly before d.
 
-    L'ADR utilisé est indexé par la date Taipei. La date NY effectivement utilisée
-    est conservée dans la colonne ``adr_date`` pour audit.
+    The ADR used is indexed by the Taipei date. The NY date actually used is kept
+    in the ``adr_date`` column for audit.
 
     The FX rate is read on ``adr_date``. ``fx_on_adr_date=False`` reads it on the
     Taipei date instead, which reproduces the earlier Yahoo-based version.
@@ -63,7 +63,7 @@ def premium_prev_ny(adr_usd: pd.Series, local_twd: pd.Series, usdtwd: pd.Series,
     adr = _as_series(adr_usd, "adr").to_frame()
     adr["adr_date"] = adr.index
 
-    # Décaler d'un jour garantit "strictement antérieur" lors du merge_asof.
+    # Shifting by one day guarantees "strictly before" in the merge_asof.
     adr_shifted = adr.copy()
     adr_shifted.index = adr_shifted.index + pd.Timedelta(days=1)
 
@@ -76,7 +76,7 @@ def premium_prev_ny(adr_usd: pd.Series, local_twd: pd.Series, usdtwd: pd.Series,
     df["fx"] = fx.reindex(fx_dates).to_numpy()
     df = df.dropna(subset=["adr", "local", "fx"])
 
-    # Écart max toléré entre date Taipei et date NY utilisée (week-ends, fériés).
+    # Maximum gap allowed between the Taipei date and the NY date used (weekends, holidays).
     gap = (df.index - pd.DatetimeIndex(df["adr_date"])).days
     df["ny_gap_days"] = gap
     df = df[df["ny_gap_days"] <= 5]
@@ -87,7 +87,7 @@ def premium_prev_ny(adr_usd: pd.Series, local_twd: pd.Series, usdtwd: pd.Series,
 
 
 def asynchrony_diagnostics(same_day: pd.DataFrame, prev_ny: pd.DataFrame) -> pd.DataFrame:
-    """Compare les deux définitions : niveau, bruit des variations, autocorrélation."""
+    """Compare the two definitions: level, noise of the changes, autocorrelation."""
     rows = {}
     for name, df in {"same_day": same_day, "prev_ny": prev_ny}.items():
         p = df["premium"]
@@ -97,8 +97,8 @@ def asynchrony_diagnostics(same_day: pd.DataFrame, prev_ny: pd.DataFrame) -> pd.
             "premium_mean": p.mean(),
             "premium_std": p.std(),
             "daily_change_std": dp.std(),
-            # Autocorrélation négative des variations = signe de bruit de mesure
-            # (un écart dû à l'asynchronie se corrige le lendemain).
+            # Negative autocorrelation of the changes is a sign of measurement noise
+            # (a gap caused by asynchrony reverses the next day).
             "daily_change_autocorr_lag1": dp.autocorr(lag=1),
         }
     return pd.DataFrame(rows).T

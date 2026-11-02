@@ -1,12 +1,11 @@
-"""Téléchargement et cache local des données (yfinance).
+"""Download and local cache of the data (yfinance, FRED).
 
-Limites à documenter dans le README :
-- yfinance est une API non officielle de Yahoo Finance (pas de garantie de qualité).
-- On utilise les prix de clôture NON ajustés (auto_adjust=False) : les dates de
-  détachement de dividende diffèrent entre Taipei et l'ADR, et l'ajustement
-  rétroactif de Yahoo déformerait le niveau de la prime.
-- L'horodatage exact du "Close" de TWD=X n'est pas documenté par Yahoo : à vérifier
-  contre un fixing officiel (ex. Taipei Forex) avant toute conclusion fine.
+Limitations to document in the README:
+- yfinance is an unofficial Yahoo Finance API (no quality guarantee).
+- Closing prices are UNADJUSTED (auto_adjust=False): ex-dividend dates differ between
+  Taipei and the ADR, and Yahoo's retroactive adjustment would distort the premium level.
+- The exact timestamp of the TWD=X "Close" is not documented by Yahoo: check it against
+  an official fixing (e.g. Taipei Forex) before drawing fine conclusions.
 """
 from __future__ import annotations
 
@@ -22,7 +21,7 @@ FRED_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DEXTAUS"
 
 
 def download(start: str = "2010-01-01", end: str | None = None, refresh: bool = False) -> pd.DataFrame:
-    """Renvoie un DataFrame (colonnes adr, local, fx) des clôtures non ajustées, mis en cache en CSV."""
+    """Return a DataFrame (columns adr, local, fx) of unadjusted closes, cached in CSV."""
     cache = DATA_DIR / "raw_closes.csv"
     if cache.exists() and not refresh:
         return pd.read_csv(cache, index_col=0, parse_dates=True)
@@ -33,10 +32,10 @@ def download(start: str = "2010-01-01", end: str | None = None, refresh: bool = 
     for key, ticker in TICKERS.items():
         df = yf.download(ticker, start=start, end=end, auto_adjust=False, progress=False)
         if df.empty:
-            raise RuntimeError(f"Aucune donnée pour {ticker}")
+            raise RuntimeError(f"No data for {ticker}")
         close = df["Close"]
         out[key] = close.iloc[:, 0] if isinstance(close, pd.DataFrame) else close
-    # outer : chaque marché garde ses propres jours de bourse, l'alignement se fait ensuite.
+    # outer: each market keeps its own trading days, the alignment is done later.
     raw = pd.concat(out, axis=1, join="outer").sort_index()
     raw.index = pd.DatetimeIndex(raw.index).tz_localize(None)
     DATA_DIR.mkdir(exist_ok=True)
