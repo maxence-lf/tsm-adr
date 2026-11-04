@@ -4,7 +4,8 @@ prev_ny is the reference definition, same_day the robustness check. Half-lives a
 expressed in trading days; weekly ones are converted at 5 trading days per week.
 
 Usage: python scripts/mean_reversion.py
-Output: data/mean_reversion_results.csv, figures/rolling_mean_half_life.png
+Output: data/mean_reversion_results.csv, figures/rolling_mean_half_life.png,
+        figures/rolling_arma_half_life.png
 """
 import sys
 from pathlib import Path
@@ -31,6 +32,11 @@ CHOW_DATES = ["2026-04-01", "2026-04-15", "2026-04-24", "2026-05-01"]
 # Below one year of weekly data, the AR(1) slope of a regime whose half-life is
 # itself several weeks long is too imprecise for a break test to be conclusive.
 MIN_WEEKS = 52
+# Rolling ARMA(1,1) on prev_ny, without any hand-picked sub-period.
+ARMA_WINDOW_WEEKS = 156  # 3 years
+ARMA_WINDOW_DAYS = 504  # 2 years, as a comparison
+PHI_MAX = 0.999  # beyond this the half-life is not identified from one window
+HALF_LIFE_THRESHOLD = 20  # trading days
 # The "before" regime of a full-history Chow test spans premiums from 1% to 20%:
 # placebo dates show whether the test rejects everywhere, and a sample starting in
 # 2024 compares the candidate dates with the recent regime only.
@@ -150,6 +156,88 @@ def subperiods(series: dict[str, pd.Series]) -> list[dict]:
     return rows
 
 
+def rolling_arma(series: dict[str, pd.Series]) -> list[dict]:
+    """ARMA(1,1) on rolling prev_ny windows, monthly step, plus the weekly AR(1).
+
+    A window is excluded from the statistics when the fit did not converge or when
+    phi > PHI_MAX.
+    """
+    s = series["prev_ny"]
+    weekly = to_weekly(s)
+    month_ends = s.groupby(s.index.to_period("M")).tail(1).index
+    rows = []
+    for end in month_ends:
+        windows = [
+            ("weekly", "arma11", weekly.loc[:end].iloc[-ARMA_WINDOW_WEEKS:], ARMA_WINDOW_WEEKS, DAYS_PER_WEEK),
+            ("weekly", "ar1", weekly.loc[:end].iloc[-ARMA_WINDOW_WEEKS:], ARMA_WINDOW_WEEKS, DAYS_PER_WEEK),
+            ("daily", "arma11", s.loc[:end].iloc[-ARMA_WINDOW_DAYS:], ARMA_WINDOW_DAYS, 1),
+        ]
+        for freq, model, x, size, scale in windows:
+            if len(x) < size:
+                continue
+            out = arma11_half_life(x) if model == "arma11" else ar1_half_life(x)
+            converged = out.get("converged", True)
+            rows.append({
+                "analysis": "rolling_arma", "definition": "prev_ny", "frequency": freq, "model": model,
+                "start": x.first_valid_index().date(), "end": end.date(), "n": int(x.notna().sum()),
+                "phi": out["phi"], "theta": out.get("theta", np.nan),
+                "half_life_days": out["half_life"] * scale,
+                "half_life_ci_low": out["half_life_ci_low"] * scale,
+                "half_life_ci_high": out["half_life_ci_high"] * scale,
+                "converged": converged,
+                "excluded": model == "arma11" and (not converged or out["phi"] > PHI_MAX),
+            })
+    return rows
+
+
+def summarize_rolling_arma(rows: list[dict]) -> None:
+    t = pd.DataFrame(rows)
+    print(f"\nRolling ARMA(1,1), prev_ny, monthly step (half-life in trading days; windows not "
+          f"converged or with phi > {PHI_MAX} excluded)")
+    for (freq, model), g in t.groupby(["frequency", "model"], sort=False):
+        kept = g[~g["excluded"]]
+        hl = kept["half_life_days"]
+        q1, med, q3 = hl.quantile([0.25, 0.5, 0.75])
+        low = kept["half_life_ci_low"].median()
+        theta = f", theta median {kept['theta'].median():.2f}" if model == "arma11" else ""
+        print(f"  {freq:6s} {model:6s} windows {len(g)}, excluded {int(g['excluded'].sum())}: "
+              f"median {med:.1f} [Q1 {q1:.1f}, Q3 {q3:.1f}], range {hl.min():.1f} to {hl.max():.1f}, "
+              f"median CI low {low:.1f}, share > {HALF_LIFE_THRESHOLD} days "
+              f"{(hl > HALF_LIFE_THRESHOLD).mean():.0%}{theta}")
+    excluded = t[t["excluded"]]
+    if len(excluded):
+        print("  excluded windows: " + ", ".join(f"{r.frequency} {r.end} (phi {r.phi:.4f}, "
+              f"{'converged' if r.converged else 'not converged'})" for r in excluded.itertuples()))
+
+
+def plot_rolling_arma(rows: list[dict], out: Path) -> None:
+    t = pd.DataFrame(rows)
+    t["end"] = pd.to_datetime(t["end"])
+    fig, ax = plt.subplots(figsize=(11, 5))
+    styles = {
+        ("weekly", "arma11"): ("#d95f02", "-", "ARMA(1,1) weekly, 3-year window"),
+        ("daily", "arma11"): ("#1f77b4", "-", "ARMA(1,1) daily, 2-year window"),
+        ("weekly", "ar1"): ("#7f7f7f", "--", "AR(1) weekly, 3-year window"),
+    }
+    for (freq, model), (color, ls, label) in styles.items():
+        g = t[(t["frequency"] == freq) & (t["model"] == model)]
+        shown = g["half_life_days"].where(~g["excluded"])
+        ax.plot(g["end"], shown, color=color, ls=ls, lw=1.4, label=label)
+        if model == "arma11":
+            ax.plot(g["end"], g["half_life_ci_low"].where(~g["excluded"]), color=color, ls=":", lw=1.0,
+                    label=f"ARMA(1,1) {freq}, lower 95% bound")
+    for end in t.loc[t["excluded"], "end"].unique():
+        ax.axvspan(end - pd.Timedelta(days=15), end + pd.Timedelta(days=15), color="0.85", lw=0, zorder=0)
+    ax.axhline(HALF_LIFE_THRESHOLD, color="black", lw=0.6)
+    ax.set_yscale("log")
+    ax.set_ylabel("Half-life (trading days)")
+    ax.set_title("prev_ny half-life on rolling windows, monthly step (grey: excluded windows)")
+    ax.grid(alpha=0.3)
+    ax.legend(frameon=False, fontsize=8, ncol=2)
+    fig.tight_layout()
+    fig.savefig(out, dpi=150)
+
+
 def model_comparison(series: dict[str, pd.Series]) -> list[dict]:
     """AR(1) vs ARMA(1,1) on the full sample and each sub-period, for every sampling."""
     periods = [("full", None, None)] + SUBPERIODS
@@ -226,7 +314,8 @@ def main() -> None:
     series = premiums()
     full, roll, breaks, subs = full_sample(series), rolling(series), chow(series), subperiods(series)
     models = model_comparison(series)
-    table = pd.DataFrame(full + roll + breaks + subs + models)
+    roll_arma = rolling_arma(series)
+    table = pd.DataFrame(full + roll + breaks + subs + models + roll_arma)
     out_csv = ROOT / "data" / "mean_reversion_results.csv"
     table.to_csv(out_csv, index=False)
 
@@ -265,6 +354,8 @@ def main() -> None:
               f"std {s.std:6.2%}  phi={s.phi:.3f}  half-life {fmt_hl(s)} {s.note}")
 
     print_model_comparison(models)
+    summarize_rolling_arma(roll_arma)
+    plot_rolling_arma(roll_arma, ROOT / "figures" / "rolling_arma_half_life.png")
 
     out_fig = ROOT / "figures" / "rolling_mean_half_life.png"
     plot_rolling(r, out_fig)
