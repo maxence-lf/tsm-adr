@@ -330,6 +330,8 @@ def main() -> None:
     models = model_comparison(series)
     roll_arma = rolling_arma(series)
     table = pd.DataFrame(full + roll + breaks + subs + models + roll_arma)
+    # Only rolling ARMA rows define it: False elsewhere keeps the column boolean in the CSV.
+    table["excluded"] = table["excluded"].eq(True)
     out_csv = ROOT / "data" / "mean_reversion_results.csv"
     table.to_csv(out_csv, index=False)
 
