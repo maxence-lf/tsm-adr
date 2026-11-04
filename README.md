@@ -80,6 +80,70 @@ for at most 3 business days, and never past the last published value.
 `scripts/build_premium.py --fx-source yahoo` reproduces the earlier Yahoo version,
 and `--no-clean` rebuilds the raw figure above.
 
+## Mean reversion
+Reference definition `prev_ny` with the FRED exchange rate, 2010-01-04 to
+2026-10-23. Half-lives are in trading days; weekly data are sampled on Fridays and
+converted at 5 trading days per week. Code: `scripts/mean_reversion.py`.
+
+**The full sample is not stationary.** ADF does not reject a unit root (p = 0.23
+daily, 0.18 weekly) and KPSS rejects level stationarity (p at or below 0.01, the
+bound of its table). The premium moves between level regimes: a weekly mean of
+3.1% in 2010-2019, 7.3% in 2020-2023, 19.2% from 2024 to April 2026 and 14.1%
+since May 2026. Full-sample half-lives mix mean reversion with these level shifts
+and are not used.
+
+**A naive AR(1) is biased by asynchrony.** Within sub-periods, AR(1) half-lives
+range from 2 to 17 trading days, and daily estimates are about 4 times shorter
+than weekly ones. Their residuals remain autocorrelated (lag 1: -0.20 to -0.42).
+A simulated AR(1) with a true half-life of 34.3 days, plus white noise calibrated
+on the observed -0.44 autocorrelation of daily changes, reproduces the bias: the
+AR(1) estimates 4.2 days daily and 14 days weekly.
+
+**Signal plus noise: ARMA(1,1).** An AR(1) signal observed with white noise is an
+ARMA(1,1). In simulation it recovers the true half-life at both frequencies. On the
+premium, daily and weekly estimates agree at about 55 to 70 trading days within each
+sub-period, theta is negative (-0.63 to -0.76 daily, -0.44 to -0.59 weekly), and
+weekly residuals are white except in 2020-2023.
+
+| Period | Weeks | Mean premium | AR(1) daily | AR(1) weekly | ARMA daily [95% CI] | ARMA weekly [95% CI] | Theta weekly | Ljung-Box p, weekly ARMA |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 2010-2019 | 514 | 3.1% | 2.2 | 7.8 | 61.9 [44.9, 99.4] | 63.1 [40.4, 137.9] | -0.59 | 0.28 |
+| 2020-2023 | 206 | 7.3% | 4.1 | 17.0 | 54.6 [30.1, 279.5] | 63.9 [33.1, 551.5] | -0.49 | 0.003 |
+| 2024 to April 2026 | 119 | 19.2% | 4.0 | 12.2 | 53.4 [26.9, 2103] | 69.1 [29.6, inf] | -0.44 | 0.72 |
+
+**Rolling windows, without a manual split.** On 3-year windows with a monthly step,
+the weekly ARMA half-life has a median of 70 trading days (interquartile range 35 to
+122). It exceeds 20 days in 92% of the 160 windows kept, and its lower 95% bound
+exceeds 20 days in 68% of them; the weekly AR(1) has a median of 9 days. The level
+is not stable, however: windows ending in 2017-2019 have a median of 25 days, with
+values below 20 days for windows ending between March 2018 and October 2019, while
+windows ending in 2024-2026 have a median of 158 days. The daily ARMA on 2-year
+windows has a median of 38 days and is usually shorter than the weekly estimate
+(median ratio 1.8). The robust result is an order of magnitude: the half-life is
+weeks to months, not days. The 55 to 70 day figure is a sub-period average, not a
+constant.
+
+![Rolling ARMA(1,1) and AR(1) half-lives of the prev_ny premium](figures/rolling_arma_half_life.png)
+
+**Limitations.**
+- The sub-periods were chosen after looking at the data, hence the rolling window
+  above, which confirms the order of magnitude but not a stable level.
+- Upper bounds of the confidence intervals are unreliable: they come from a Wald
+  interval on phi close to 1 and are often very large or infinite.
+- Daily ARMA residuals are not white (Ljung-Box p below 0.001 in 2010-2019 and
+  2020-2023) although their lag-1 autocorrelation is close to zero: the
+  measurement noise is not purely white, so weekly estimates are preferred.
+- Since May 2026 there are only 26 weeks of data, too few to estimate a half-life.
+
+### What did not work
+- **Chow test.** At the candidate dates of April and May 2026 the test rejects
+  stability (p around 1e-6), but it also rejects at every placebo date from 2013 to
+  2025 (p from 1e-14 to 3e-4): the pooled "before" regime spans premiums from 1% to
+  20%, and the AR(1) residuals are autocorrelated. The results are not conclusive.
+- **Dating the level drop.** On data since 2024, the test is already significant at
+  2026-01-02 (p = 0.001). The level drop starts in January 2026, before the FSC
+  decision, and cannot be dated precisely with this method.
+
 ## Reproduce
 Requires Python 3.12.
 
@@ -88,14 +152,15 @@ Requires Python 3.12.
     pip install -r requirements.txt
     pytest -q
     python scripts/build_premium.py
+    python scripts/mean_reversion.py
 
 ## Roadmap
 - [x] Data pipeline and premium construction (two alignments, unit tests)
 - [x] Asynchrony diagnostics and choice of reference definition
-- [ ] Stationarity, mean reversion (ADF, AR(1)/OU half-life), structural breaks
+- [x] Stationarity, mean reversion (ADF, AR(1)/OU half-life), structural breaks
 - [ ] Explanatory factors (flows, FX, relative US/Taiwan returns)
 - [ ] Walk-forward strategy with transaction costs, bootstrapped Sharpe
 - [ ] Extension to other Taiwanese ADRs (UMC, ASE, Chunghwa Telecom)
 
 ## Tools
-Python, pandas, matplotlib, pytest. Development assisted by Claude Code.
+Python, pandas, statsmodels, matplotlib, pytest. Development assisted by Claude Code.
