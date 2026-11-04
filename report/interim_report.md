@@ -39,7 +39,8 @@ Each issue below would have changed a conclusion had it not been detected. Secti
 
 An American Depositary Receipt (ADR) is a certificate traded in the United States
 that represents shares of a foreign company held by a depositary bank. One TSM ADR
-represents five ordinary 2330.TW shares. With the exchange rate, the price of an ADR
+represents five ordinary 2330.TW shares; the code assumes this ratio is constant over
+the whole sample (not verified, see Section 8). With the exchange rate, the price of an ADR
 can be compared with the price of the shares it represents; the difference, in
 percent, is the ADR premium. Under the law of one price (LOOP), two claims on the same
 cash flows should trade at the same price once currencies and conversion costs are
@@ -539,6 +540,9 @@ may have accentuated it, but these tests cannot isolate its effect.
   live strategy the FRED rate would not be available at the Taipei close, and a market
   rate would be needed. The FRED rate is also not synchronous with either close: it is
   recorded at 16:00 or 17:00 UTC (Section 5).
+- **ADR ratio.** The premium uses a constant ratio of five shares per ADR from 2010 to
+  2026. Whether the ratio or the share count changed during the sample was not
+  verified; a change would shift the premium level from that date.
 - **Dividends.** Prices are unadjusted on purpose, but ex-dividend dates, which differ
   between the two markets, are not yet treated. They may create small spurious moves
   in the premium around those dates.
