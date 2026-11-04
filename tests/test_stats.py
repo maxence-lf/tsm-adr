@@ -6,7 +6,8 @@ import pandas as pd
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from adr_premium.stats import adf_kpss, ar1_half_life, chow_test, to_weekly
+from adr_premium.stats import (_half_life, adf_kpss, ar1_half_life, arma11_half_life, chow_test,
+                               to_weekly, to_weekly_mean)
 
 
 def _ar1(phi, n, seed):
@@ -69,6 +70,75 @@ def test_measurement_noise_shortens_daily_half_life():
     assert observed.diff().autocorr() == pytest.approx(-0.44, abs=0.05)
     assert daily < 0.5 * true
     assert abs(weekly_in_days - true) < abs(daily - true)
+
+
+def _noisy_ar1(latent_seed, noise_seed, n=8000):
+    """Same set-up as the bias test: AR(1) phi = 0.98 plus white noise with sd 2."""
+    latent = _ar1(0.98, n, seed=latent_seed)
+    return _daily(latent + np.random.default_rng(noise_seed).normal(scale=2.0, size=n))
+
+
+# (4, 5) are the seeds of the bias test; the others come from the calibration run.
+# Over 20 seed pairs, the ARMA half-life had a mean of 36.2 days (sd 4.7) daily and
+# 35.1 days (sd 5.0) weekly, against a true 34.3 days: a tolerance of 15 days is
+# 3 sd. The AR(1) stayed at 3 to 5 days daily and 11 to 17 days weekly, always at
+# least 17 days from the truth: inside the band for the ARMA, outside for the AR(1).
+@pytest.mark.parametrize("latent_seed, noise_seed", [(4, 5), (102, 103), (104, 105)])
+@pytest.mark.parametrize("frequency, days_per_step", [("daily", 1), ("weekly", 5)])
+def test_arma_recovers_half_life_under_measurement_noise(latent_seed, noise_seed, frequency, days_per_step):
+    true = np.log(0.5) / np.log(0.98)
+    observed = _noisy_ar1(latent_seed, noise_seed)
+    x = observed if frequency == "daily" else to_weekly(observed)
+
+    arma = arma11_half_life(x)
+    arma_days = arma["half_life"] * days_per_step
+    ar1_days = ar1_half_life(x)["half_life"] * days_per_step
+
+    assert arma["converged"]
+    assert arma["theta"] < 0
+    assert arma_days == pytest.approx(true, abs=15)
+    assert ar1_days != pytest.approx(true, abs=15)
+    assert abs(arma_days - true) < abs(ar1_days - true)
+    assert arma["half_life_ci_low"] * days_per_step < true < arma["half_life_ci_high"] * days_per_step
+
+
+def test_arma_whitens_residuals_that_ar1_leaves_correlated():
+    # On a correctly specified model the Ljung-Box p-value is uniform, so p > 0.05 on
+    # a single seed would fail 5% of the time by design (these seeds give p = 0.01).
+    # The test checks instead that the AR(1) is rejected massively and the ARMA is not.
+    observed = _noisy_ar1(4, 5)
+    ar1 = ar1_half_life(observed)
+    arma = arma11_half_life(observed)
+    assert ar1["resid_autocorr"] < -0.3
+    assert ar1["ljungbox_pvalue"] < 1e-10
+    assert abs(arma["resid_autocorr"]) < 0.05
+    assert arma["ljungbox_pvalue"] > 1e-3
+
+
+def test_arma_handles_empty_weeks():
+    weekly = to_weekly(_noisy_ar1(4, 5))
+    holed = weekly.copy()
+    holed.iloc[[100, 500, 900]] = np.nan
+    out = arma11_half_life(holed)
+    assert out["n"] == weekly.notna().sum() - 3
+    assert np.isfinite(out["half_life"])
+
+
+def test_half_life_is_infinite_without_mean_reversion():
+    assert np.isinf(_half_life(1.0))
+    assert np.isinf(_half_life(1.02))
+    walk = _daily(np.cumsum(np.random.default_rng(10).normal(size=1000)))
+    out = arma11_half_life(walk)  # must not raise near a unit root
+    assert out["phi"] > 0.95
+    assert np.isinf(out["half_life_ci_high"]) or out["half_life_ci_high"] > 100
+
+
+def test_weekly_mean_averages_and_does_not_fill():
+    s = pd.Series([1.0, 3.0, 5.0], index=pd.to_datetime(["2026-03-02", "2026-03-05", "2026-03-16"]))
+    weekly = to_weekly_mean(s)
+    assert weekly.iloc[0] == 2.0
+    assert np.isnan(weekly.iloc[1])
+    assert weekly.iloc[2] == 5.0
 
 
 def test_weekly_keeps_last_value_and_does_not_fill():
