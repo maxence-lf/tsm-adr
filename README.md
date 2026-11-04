@@ -94,7 +94,7 @@ and are not used.
 
 **A naive AR(1) is biased by asynchrony.** Within sub-periods, AR(1) half-lives
 range from 2 to 17 trading days, and daily estimates are about 4 times shorter
-than weekly ones. Their residuals remain autocorrelated (lag 1: -0.20 to -0.42).
+than weekly ones. Their residuals remain autocorrelated (lag 1: -0.19 to -0.39).
 A simulated AR(1) with a true half-life of 34.3 days, plus white noise calibrated
 on the observed -0.44 autocorrelation of daily changes, reproduces the bias: the
 AR(1) estimates 4.2 days daily and 14 days weekly.
@@ -119,7 +119,7 @@ is not stable, however: windows ending in 2017-2019 have a median of 25 days, wi
 values below 20 days for windows ending between March 2018 and October 2019, while
 windows ending in 2024-2026 have a median of 158 days. The daily ARMA on 2-year
 windows has a median of 38 days and is usually shorter than the weekly estimate
-(median ratio 1.8).
+(median ratio 1.9).
 
 ![Rolling ARMA(1,1) and AR(1) half-lives of the prev_ny premium](figures/rolling_arma_half_life.png)
 
