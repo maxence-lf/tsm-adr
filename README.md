@@ -119,11 +119,16 @@ is not stable, however: windows ending in 2017-2019 have a median of 25 days, wi
 values below 20 days for windows ending between March 2018 and October 2019, while
 windows ending in 2024-2026 have a median of 158 days. The daily ARMA on 2-year
 windows has a median of 38 days and is usually shorter than the weekly estimate
-(median ratio 1.8). The robust result is an order of magnitude: the half-life is
-weeks to months, not days. The 55 to 70 day figure is a sub-period average, not a
-constant.
+(median ratio 1.8).
 
 ![Rolling ARMA(1,1) and AR(1) half-lives of the prev_ny premium](figures/rolling_arma_half_life.png)
+
+**Conclusion.** Corrected for asynchrony noise, the half-life is measured in weeks
+to months: the rolling weekly ARMA median is about 70 trading days, above 20 days in
+92% of windows, against about 9 days for the naive AR(1). It varies over time, from
+about 25 days in windows ending in 2017-2019 to about 158 days in windows ending in
+2024-2026. Untested observation: the half-life seems to lengthen when the premium
+level is high.
 
 **Limitations.**
 - The sub-periods were chosen after looking at the data, hence the rolling window
