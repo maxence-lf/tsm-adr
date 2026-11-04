@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 from adr_premium.clean import prepare_fred_fx
 from adr_premium.data import download, download_fred_fx
 from adr_premium.premium import premium_prev_ny, premium_same_day
-from adr_premium.stats import adf_kpss, ar1_half_life, chow_test, to_weekly
+from adr_premium.stats import adf_kpss, ar1_half_life, arma11_half_life, chow_test, to_weekly, to_weekly_mean
 
 DAYS_PER_WEEK = 5
 ROLLING_DAYS = 504  # 2 years of trading days
@@ -44,6 +44,18 @@ SUBPERIODS = [
     ("2024-Apr 2026", "2024-01-01", "2026-04-30"),
     ("May 2026-end", "2026-05-01", None),
 ]
+
+
+# Sampling schemes for the AR(1) / ARMA(1,1) comparison, with days per step.
+# Weekly means are a control only: averaging creates autocorrelation of its own
+# (smoother levels, positively autocorrelated changes), so their half-lives are not
+# directly comparable with point samples.
+SAMPLINGS = [
+    ("daily", lambda s: s, 1),
+    ("weekly_friday", to_weekly, DAYS_PER_WEEK),
+    ("weekly_mean", to_weekly_mean, DAYS_PER_WEEK),
+]
+MODELS = [("ar1", ar1_half_life), ("arma11", arma11_half_life)]
 
 
 def premiums() -> dict[str, pd.Series]:
@@ -134,6 +146,44 @@ def subperiods(series: dict[str, pd.Series]) -> list[dict]:
     return rows
 
 
+def model_comparison(series: dict[str, pd.Series]) -> list[dict]:
+    """AR(1) vs ARMA(1,1) on the full sample and each sub-period, for every sampling."""
+    periods = [("full", None, None)] + SUBPERIODS
+    rows = []
+    for name, s in series.items():
+        for label, start, end in periods:
+            for sampling, transform, scale in SAMPLINGS:
+                x = transform(s).loc[start:end]
+                n = int(x.notna().sum())
+                for model, fit in MODELS:
+                    out = fit(x)
+                    rows.append({
+                        "analysis": "model_comparison", "definition": name, "frequency": sampling,
+                        "label": label, "model": model,
+                        "start": x.first_valid_index().date(), "end": x.last_valid_index().date(),
+                        "n": n, "phi": out["phi"], "theta": out.get("theta", np.nan),
+                        "half_life_days": out["half_life"] * scale,
+                        "half_life_ci_low": out["half_life_ci_low"] * scale,
+                        "half_life_ci_high": out["half_life_ci_high"] * scale,
+                        "resid_autocorr": out["resid_autocorr"],
+                        "ljungbox_pvalue": out["ljungbox_pvalue"],
+                        "converged": out.get("converged", True),
+                        "note": f"only {n} observations" if sampling != "daily" and n < MIN_WEEKS else "",
+                    })
+    return rows
+
+
+def print_model_comparison(rows: list[dict]) -> None:
+    t = pd.DataFrame(rows)
+    t["half-life [95% CI]"] = t.apply(fmt_hl, axis=1)
+    t["warn"] = np.where(~t["converged"], "not converged ", "") + t["note"]
+    cols = ["label", "frequency", "model", "n", "phi", "theta", "half-life [95% CI]",
+            "resid_autocorr", "ljungbox_pvalue", "warn"]
+    for name, g in t.groupby("definition", sort=False):
+        print(f"\nAR(1) vs ARMA(1,1), {name} (half-life in trading days; Ljung-Box at 4 lags)")
+        print(g[cols].to_string(index=False, float_format=lambda v: f"{v:.3f}"))
+
+
 def plot_rolling(table: pd.DataFrame, out: Path) -> None:
     ref = table[table["definition"] == "prev_ny"]
     fig, (top, bottom) = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
@@ -171,7 +221,8 @@ def main() -> None:
     pd.set_option("display.width", 170)
     series = premiums()
     full, roll, breaks, subs = full_sample(series), rolling(series), chow(series), subperiods(series)
-    table = pd.DataFrame(full + roll + breaks + subs)
+    models = model_comparison(series)
+    table = pd.DataFrame(full + roll + breaks + subs + models)
     out_csv = ROOT / "data" / "mean_reversion_results.csv"
     table.to_csv(out_csv, index=False)
 
@@ -206,6 +257,8 @@ def main() -> None:
     for s in pd.DataFrame(subs).itertuples():
         print(f"  {s.definition:8s} {s.label:14s} {s.start} to {s.end}  n={s.n_ar1 + 1:3d}  mean {s.mean:6.2%}  "
               f"std {s.std:6.2%}  phi={s.phi:.3f}  half-life {fmt_hl(s)} {s.note}")
+
+    print_model_comparison(models)
 
     out_fig = ROOT / "figures" / "rolling_mean_half_life.png"
     plot_rolling(r, out_fig)
