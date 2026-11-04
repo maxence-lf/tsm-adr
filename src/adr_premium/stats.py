@@ -130,6 +130,14 @@ def to_weekly_mean(series: pd.Series) -> pd.Series:
     return series.resample("W-FRI").mean()
 
 
+def level_shift(weekly: pd.Series, start, end) -> float:
+    """Mean of the last year minus mean of the first year of a window, in series units."""
+    x = weekly.loc[start:end]
+    first = x.loc[:pd.Timestamp(start) + pd.DateOffset(years=1)].mean()
+    last = x.loc[pd.Timestamp(end) - pd.DateOffset(years=1):].mean()
+    return last - first
+
+
 def chow_test(series: pd.Series, break_date) -> dict:
     """Chow F test of a change in the AR(1) parameters at ``break_date``.
 

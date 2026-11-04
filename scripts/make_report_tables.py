@@ -5,9 +5,10 @@ the content between the markers <!-- table:<name> --> and <!-- /table:<name> -->
 replaced by the table, so no number in a report table is typed by hand.
 
 Inputs: data/raw_closes.csv and data/fx_fred.csv (through the project loaders),
-data/premium_same_day.csv, data/premium_prev_ny.csv, data/premium_table.csv and
-data/mean_reversion_results.csv. Run build_premium.py, export_premium_table.py and
-mean_reversion.py first.
+data/premium_same_day.csv, data/premium_prev_ny.csv, data/premium_table.csv,
+data/mean_reversion_results.csv and data/level_shift_simulation.csv. Run
+build_premium.py, export_premium_table.py, mean_reversion.py and
+simulate_level_shift.py first.
 
 Usage: python scripts/make_report_tables.py
 """
@@ -33,7 +34,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from adr_premium.clean import FX_MAX, FX_MIN, clean_fx, flag_fx, prepare_fred_fx
 from adr_premium.data import download, download_fred_fx
 from adr_premium.premium import ADR_RATIO, asynchrony_diagnostics, premium_prev_ny, premium_same_day
-from adr_premium.stats import ar1_half_life, arma11_half_life, to_weekly
+from adr_premium.stats import ar1_half_life, arma11_half_life, level_shift as _level_shift, to_weekly
 from compare_fx import GAP_THRESHOLD, compare_flagged, persistent_gaps, relative_gap
 
 DATA = ROOT / "data"
@@ -564,11 +565,8 @@ def t_arma(d: dict) -> str:
 
 
 def level_shift(weekly: pd.Series, start, end) -> float:
-    """Mean of the last year minus mean of the first year of a window, in percentage points."""
-    x = weekly.loc[start:end]
-    first = x.loc[:pd.Timestamp(start) + pd.DateOffset(years=1)].mean()
-    last = x.loc[pd.Timestamp(end) - pd.DateOffset(years=1):].mean()
-    return (last - first) * 100
+    """Level shift of a window of the premium, in percentage points."""
+    return _level_shift(weekly, start, end) * 100
 
 
 def t_rolling(d: dict) -> str:
@@ -627,6 +625,50 @@ def t_rolling(d: dict) -> str:
                                           "Rank correlation: abs level shift vs half-life"]))
 
 
+def t_level_shift_sim(d: dict) -> str:
+    """No-regime simulation (scripts/simulate_level_shift.py) against the real rolling results."""
+    sim = pd.read_csv(DATA / "level_shift_simulation.csv")
+    r = mr_rows(d, "rolling_arma")
+    wk = r[(r["frequency"] == "weekly") & (r["model"] == "arma11") & ~r["excluded"]]
+    weekly_premium = to_weekly(d["prev"]["premium"])
+    shifts = np.array([level_shift(weekly_premium, a, b) for a, b in zip(wk["start"], wk["end"])])
+    stable = np.abs(shifts) < SMALL_SHIFT
+    real = {"rho": spearmanr(np.abs(shifts), wk["half_life_days"])[0], "median": wk["half_life_days"].median(),
+            "stable": wk["half_life_days"][stable].median(), "n_stable": int(stable.sum())}
+
+    def band(s, digits=2):
+        return f"{s.median():.{digits}f} [{s.quantile(0.05):.{digits}f}, {s.quantile(0.95):.{digits}f}]"
+
+    rows = []
+    for hl, g in sim.groupby("true_half_life"):
+        rows.append([f"Simulated, true half-life {hl} days, no regime ({len(g)} replications)",
+                     band(g["rank_correlation"]), band(g["median_half_life"], 1),
+                     band(g["median_half_life_stable"], 1), f"{g['stable_windows'].median():.0f}",
+                     f"{(g['rank_correlation'] >= real['rho']).mean():.0%}",
+                     f"{(g['median_half_life_stable'] >= real['stable']).mean():.0%}"])
+        key(f"Simulation no regime, true {hl}: rank correlation", band(g["rank_correlation"]), "level_shift_simulation.csv")
+        key(f"Simulation no regime, true {hl}: median half-life all / stable windows",
+            f"{g['median_half_life'].median():.1f} / {g['median_half_life_stable'].median():.1f}",
+            "level_shift_simulation.csv")
+        key(f"Simulation no regime, true {hl}: share stable median >= real / rank correlation max",
+            f"{(g['median_half_life_stable'] >= real['stable']).mean():.0%} / {g['rank_correlation'].max():.2f}",
+            "level_shift_simulation.csv")
+        key(f"Simulation no regime, true {hl}: share overall median >= real",
+            f"{(g['median_half_life'] >= real['median']).mean():.0%}", "level_shift_simulation.csv")
+        key(f"Simulation no regime, true {hl}: daily change autocorrelation", f"{g['daily_change_autocorr'].median():.3f}",
+            "level_shift_simulation.csv")
+    rows.append(["Real `prev_ny`", f"{real['rho']:.2f}", f"{real['median']:.1f}", f"{real['stable']:.1f}",
+                 str(real["n_stable"]), "", ""])
+    key("Simulation replications per half-life", str(int(sim.groupby("true_half_life").size().iloc[0])),
+        "level_shift_simulation.csv")
+    return md(pd.DataFrame(rows, columns=["Series (weekly ARMA, 3-year windows)",
+                                          "Rank correlation: abs level shift vs half-life, median [5%, 95%]",
+                                          "Median half-life, all windows [5%, 95%]",
+                                          "Median half-life, windows with shift < 2 points [5%, 95%]",
+                                          "Windows with shift < 2 points", "Share of replications reaching the real correlation",
+                                          "Share of replications reaching the real stable median"]))
+
+
 def t_chow(d: dict) -> str:
     titles = {"chow": "Candidate date, full history", "chow_placebo": "Placebo date, full history",
               "chow_since_2024": "Sample from 2024 only"}
@@ -674,6 +716,8 @@ def t_issues(d: dict) -> str:
     shifts = pd.Series([level_shift(weekly_premium, a, b) for a, b in zip(wk["start"], wk["end"])], index=wk.index)
     shift_rho = spearmanr(shifts.abs(), wk["half_life_days"])[0]
     small_hl = wk.loc[shifts.abs() < SMALL_SHIFT, "half_life_days"]
+    no_regime = pd.read_csv(DATA / "level_shift_simulation.csv").groupby("true_half_life")["rank_correlation"].median()
+    sim_rho = " and ".join(f"{v:.2f}" for v in no_regime)
     means = d["prev"]["premium"].loc[MONTHLY_START:MONTHLY_END]
     means = means.groupby(means.index.to_period("M")).mean()
     rows = [
@@ -704,9 +748,9 @@ def t_issues(d: dict) -> str:
          "Rolling 3-year windows with a monthly step, no manual split",
          f"Weekly ARMA median {num(wk['half_life_days'].median())} days, above 20 days in "
          f"{pct((wk['half_life_days'] > 20).mean(), 0)} of windows; its variation across windows "
-         f"({num(grp['2017-2019'])} to {num(grp['2024-2026'])} days) tracks level shifts inside the windows "
-         f"(rank correlation {shift_rho:.2f}); windows with a shift below {SMALL_SHIFT:g} points: median "
-         f"{num(small_hl.median())} days"],
+         f"({num(grp['2017-2019'])} to {num(grp['2024-2026'])} days) is rank-correlated with level shifts inside "
+         f"the windows ({shift_rho:.2f}, against {sim_rho} in a no-regime simulation); windows with a shift below "
+         f"{SMALL_SHIFT:g} points: median {num(small_hl.median())} days, likely a lower bound"],
         ["e) Chow test at chosen break dates",
          f"Rejection at the April-May 2026 dates (p {pval(cand['chow_pvalue'].min())} to "
          f"{pval(cand['chow_pvalue'].max())}); placebo dates reject too (all {len(placebo)}, "
@@ -737,7 +781,7 @@ TABLES_IN_ORDER = [
     ("fx_gap_by_year", t_fx_gap_by_year), ("fx_verdicts", t_fx_verdicts), ("fx_shifts", t_fx_shifts),
     ("fx_impact", t_fx_impact), ("closing_times", t_closing_times), ("asynchrony", t_asynchrony), ("weekdays", t_weekdays),
     ("jumps", t_jumps), ("example", t_example), ("stationarity", t_stationarity), ("ar1_naive", t_ar1_naive),
-    ("simulation", t_simulation), ("arma", t_arma), ("rolling", t_rolling), ("chow", t_chow),
+    ("simulation", t_simulation), ("arma", t_arma), ("rolling", t_rolling), ("level_shift_sim", t_level_shift_sim), ("chow", t_chow),
     ("issues", t_issues), ("versions", t_versions), ("key_figures", t_key_figures),
 ]
 
