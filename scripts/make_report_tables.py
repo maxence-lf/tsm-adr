@@ -23,6 +23,8 @@ from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
+from scipy.stats import spearmanr
+from statsmodels.tsa.arima.model import ARIMA
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -46,6 +48,11 @@ MANUAL_CHECK_DATE = "2026-06-23"
 ARTICLE = {"adr": 439.78, "local": 2490.0, "fx": 31.625, "premium": 0.117, "premium_previous_close": 0.179}
 EXAMPLE_START, EXAMPLE_END = "2025-04-07", "2025-04-16"
 JUMP_THRESHOLD = 10.0  # percentage points of daily change
+MONTHLY_START, MONTHLY_END = "2025-09-01", "2026-10-31"
+SMALL_SHIFT = 2.0  # percentage points between the first and last year of a window
+WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+SUBPERIOD_DATES = {"2010-2019": ("2010-01-01", "2019-12-31"), "2020-2023": ("2020-01-01", "2023-12-31"),
+                   "2024-Apr 2026": ("2024-01-01", "2026-04-30")}
 NOISE_PERIOD = ("2011", "2016")
 SUBPERIODS = ["2010-2019", "2020-2023", "2024-Apr 2026"]
 ROLLING_GROUPS = [("2013-2016", "2013", "2016"), ("2017-2019", "2017", "2019"),
@@ -133,12 +140,39 @@ def t_data_sources(d: dict) -> str:
         "premium CSVs")
     weekly = to_weekly(d["prev"]["premium"])
     key("Empty weeks in the weekly prev_ny series", str(int(weekly.isna().sum())), "premium_prev_ny.csv")
+    moves = raw["local"].dropna().pct_change().dropna()
+    key("Largest daily rise of 2330.TW", f"{pct(moves.max(), 2)} on {moves.idxmax().date()}", "raw_closes.csv")
     key("Last Yahoo price date", str(raw.dropna(subset=["adr"]).index[-1].date()), "raw_closes.csv")
     return md(pd.DataFrame(rows, columns=["Series", "Ticker", "Source", "Unit", "First", "Last", "Observations"]),
               ["l", "l", "l", "l", "l", "l", "r"])
 
 
 def t_manual_check(d: dict) -> str:
+    """Six-line summary of the manual check; the full reconciliation is t_manual_check_detail."""
+    t = d["table"].loc[MANUAL_CHECK_DATE]
+    a = ARTICLE
+    local_usd = ADR_RATIO * t["local"] / t["fx_prev_ny"]
+    local_usd_same = ADR_RATIO * t["local"] / t["fx_same_day"]
+    article_premium = a["adr"] / (ADR_RATIO * a["local"] / a["fx"]) - 1
+    previous = d["table"].loc[str(t["adr_date_used_prev_ny"]), "premium_same_day_pct"]
+    adr_date = t["adr_date_used_prev_ny"]
+    rows = [
+        [f"Prices: TSM close on {adr_date} and on {MANUAL_CHECK_DATE} (USD); 2330.TW close on {MANUAL_CHECK_DATE} (TWD)",
+         f"{num(t['adr_prev_ny'], 2)}; {num(t['adr_same_day'], 2)}; {num(t['local'], 1)}"],
+        [f"FRED USD/TWD on {adr_date} and on {MANUAL_CHECK_DATE}", f"{num(t['fx_prev_ny'], 2)}; {num(t['fx_same_day'], 2)}"],
+        [f"`prev_ny`: {num(t['adr_prev_ny'], 2)} / ({ADR_RATIO} x {num(t['local'], 1)} / {num(t['fx_prev_ny'], 2)}) - 1",
+         f"{pct(t['adr_prev_ny'] / local_usd - 1, 2)} (pipeline: {t['premium_prev_ny_pct']:.2f}%)"],
+        [f"`same_day`: {num(t['adr_same_day'], 2)} / ({ADR_RATIO} x {num(t['local'], 1)} / {num(t['fx_same_day'], 2)}) - 1",
+         pct(t["adr_same_day"] / local_usd_same - 1, 2)],
+        ["News reports: premium, same day (previous NY close)",
+         f"{pct(a['premium'], 1)} ({pct(a['premium_previous_close'], 1)})"],
+        [f"Recomputed from the reported values {num(a['adr'], 2)}, {num(a['local'], 1)}, {num(a['fx'], 3)} "
+         f"(`same_day` on {adr_date})", f"{pct(article_premium, 2)} ({previous:.2f}%)"],
+    ]
+    return md(pd.DataFrame(rows, columns=["Item", "Value"]), ["l", "r"])
+
+
+def t_manual_check_detail(d: dict) -> str:
     t = d["table"].loc[MANUAL_CHECK_DATE]
     raw = d["raw"]
     adr_prev, local, fx_prev = t["adr_prev_ny"], t["local"], t["fx_prev_ny"]
@@ -190,6 +224,18 @@ def t_manual_check(d: dict) -> str:
     key("Manual check TSM change on d", pct(t["adr_same_day"] / adr_prev - 1, 1), "raw_closes.csv")
     key("Manual check Yahoo vs FRED gap", pct(yahoo_fx / fx_prev - 1, 2), "raw_closes.csv, fx_fred.csv")
     return md(pd.DataFrame(rows, columns=["Item", "Value", "Source"]), ["l", "r", "l"])
+
+
+def t_monthly(d: dict) -> str:
+    p = d["prev"]["premium"].loc[MONTHLY_START:MONTHLY_END]
+    g = p.groupby(p.index.to_period("M"))
+    rows = [[str(m), pct(x.mean(), 2), pct(x.min(), 1), pct(x.max(), 1), len(x)] for m, x in g]
+    means = g.mean()
+    for m in ("2025-12", "2026-01", "2026-04", "2026-05"):
+        key(f"Monthly mean prev_ny {m}", pct(means[pd.Period(m)], 2), "premium_prev_ny.csv")
+    key("Monthly mean prev_ny Sep-Dec 2025 range", f"{pct(means.iloc[:4].min(), 1)} to {pct(means.iloc[:4].max(), 1)}",
+        "premium_prev_ny.csv")
+    return md(pd.DataFrame(rows, columns=["Month", "Mean `prev_ny` premium", "Min", "Max", "Trading days"]))
 
 
 def t_fx_gross_errors(d: dict) -> str:
@@ -310,12 +356,16 @@ def t_closing_times(_: dict) -> str:
         ny_prev = ny - pd.Timedelta(days=1)
         same_gap = (ny - taipei).total_seconds() / 3600
         prev_gap = (taipei - ny_prev).total_seconds() / 3600
+        # On a Taipei Monday, prev_ny uses the Friday NY close, three days earlier.
+        monday_gap = (taipei - (ny - pd.Timedelta(days=3))).total_seconds() / 3600
         rows.append([label, taipei.strftime("%H:%M"), ny.strftime("%H:%M"), noon.strftime("%H:%M"),
-                     f"{same_gap:.1f} h", f"{prev_gap:.1f} h"])
+                     f"{same_gap:.1f} h", f"{prev_gap:.1f} h", f"{monday_gap:.1f} h"])
+        key(f"Monday prev_ny gap, {label.split()[0].lower()}", f"{monday_gap:.1f} h", "computed (zoneinfo)")
     return md(pd.DataFrame(rows, columns=["Season", "Taipei close (13:30 local), UTC",
                                           "NY close (16:00 local), UTC", "FRED rate (noon NY), UTC",
                                           "`same_day` gap: NY close d - Taipei close d",
-                                          "`prev_ny` gap: Taipei close d - NY close d-1"]))
+                                          "`prev_ny` gap: Taipei close d - NY close d-1",
+                                          "`prev_ny` gap on a Taipei Monday (Friday NY close)"]))
 
 
 def t_asynchrony(d: dict) -> str:
@@ -332,6 +382,35 @@ def t_asynchrony(d: dict) -> str:
     key("Premium sample", f"{start} to {end}", "premium CSVs")
     return md(pd.DataFrame(rows, columns=["Definition", "Observations", "Mean premium", "Premium std",
                                           "Daily change std", "Daily change autocorrelation (lag 1)"]))
+
+
+def t_weekdays(d: dict) -> str:
+    """Daily change std by weekday, and lag-1 autocorrelation of daily ARMA(1,1) residuals.
+
+    The residuals come from ARIMA(1,0,1) fits with constant on prev_ny in each of the
+    three sub-periods, pooled; the autocorrelation pairs each residual with the
+    previous trading day's.
+    """
+    changes = {name: d[frame]["premium"].diff().dropna() for name, frame in (("prev_ny", "prev"), ("same_day", "same"))}
+    pairs = []
+    for start, end in SUBPERIOD_DATES.values():
+        x = d["prev"]["premium"].loc[start:end]
+        resid = pd.Series(ARIMA(x.to_numpy(), order=(1, 0, 1), trend="c").fit().resid, index=x.index).iloc[1:]
+        pairs.append(pd.DataFrame({"e": resid, "lag": resid.shift(1)}).dropna())
+    pairs = pd.concat(pairs)
+    rows = []
+    for day in WEEKDAYS:
+        p, s = (changes[n][changes[n].index.day_name() == day] for n in ("prev_ny", "same_day"))
+        r = pairs[pairs.index.day_name() == day]
+        rows.append([day, len(p), pct(p.std(), 2), pct(s.std(), 2), len(r), f"{r['e'].corr(r['lag']):.3f}"])
+    std = {row[0]: row[2] for row in rows}
+    ac = {row[0]: row[5] for row in rows}
+    key("prev_ny daily change std by weekday", ", ".join(f"{k[:3]} {v}" for k, v in std.items()), "premium CSVs")
+    key("Daily ARMA residual autocorrelation by weekday", ", ".join(f"{k[:3]} {v}" for k, v in ac.items()),
+        "recomputed from premium_prev_ny.csv")
+    return md(pd.DataFrame(rows, columns=["Taipei weekday", "Daily changes", "`prev_ny` daily change std",
+                                          "`same_day` daily change std", "ARMA residual pairs",
+                                          "Lag-1 residual autocorrelation (daily ARMA, `prev_ny`)"]))
 
 
 def t_jumps(d: dict) -> str:
@@ -461,7 +540,11 @@ def t_arma(d: dict) -> str:
     for label in SUBPERIODS:
         dly, wk = model(d, label, "daily", "arma11"), model(d, label, "weekly_friday", "arma11")
         mean = sub[(sub["definition"] == "prev_ny") & (sub["label"] == label)].iloc[0]["mean"]
-        rows.append([label, f"{int(wk['n'])}", pct(mean), hl(dly), hl(wk), f"{dly['theta']:.2f}",
+        weekly = to_weekly(d["prev"]["premium"]).loc[slice(*SUBPERIOD_DATES[label])]
+        weekly = weekly.loc[weekly.first_valid_index():weekly.last_valid_index()]
+        key(f"Weeks with data / calendar weeks {label}", f"{int(weekly.notna().sum())} / {len(weekly)}",
+            "premium_prev_ny.csv")
+        rows.append([label, f"{int(wk['n'])} ({len(weekly)})", pct(mean), hl(dly), hl(wk), f"{dly['theta']:.2f}",
                      f"{wk['theta']:.2f}", pval(dly["ljungbox_pvalue"]), pval(wk["ljungbox_pvalue"])])
         key(f"ARMA {label} daily / weekly", f"{num(dly['half_life_days'])} / {num(wk['half_life_days'])}",
             "mean_reversion_results.csv")
@@ -474,22 +557,35 @@ def t_arma(d: dict) -> str:
     full_d, full_w = model(d, "full", "daily", "arma11"), model(d, "full", "weekly_friday", "arma11")
     key("Full-sample ARMA daily / weekly", f"{num(full_d['half_life_days'])} / {num(full_w['half_life_days'])}",
         "mean_reversion_results.csv")
-    return md(pd.DataFrame(rows, columns=["Period (`prev_ny`)", "Weeks", "Mean premium", "ARMA daily [95% CI]",
+    return md(pd.DataFrame(rows, columns=["Period (`prev_ny`)", "Weeks with data (calendar weeks)", "Mean premium",
+                                          "ARMA daily [95% CI]",
                                           "ARMA weekly [95% CI]", "Theta daily", "Theta weekly",
                                           "Ljung-Box p, daily", "Ljung-Box p, weekly"]))
+
+
+def level_shift(weekly: pd.Series, start, end) -> float:
+    """Mean of the last year minus mean of the first year of a window, in percentage points."""
+    x = weekly.loc[start:end]
+    first = x.loc[:pd.Timestamp(start) + pd.DateOffset(years=1)].mean()
+    last = x.loc[pd.Timestamp(end) - pd.DateOffset(years=1):].mean()
+    return (last - first) * 100
 
 
 def t_rolling(d: dict) -> str:
     r = mr_rows(d, "rolling_arma").copy()
     r["end"] = pd.to_datetime(r["end"])
+    weekly_premium = to_weekly(d["prev"]["premium"])
+    r["shift"] = [level_shift(weekly_premium, a, b) for a, b in zip(r["start"], r["end"])]
     rows = []
 
     def summary(label, g):
         kept = g[~g["excluded"]]
         h = kept["half_life_days"]
         q1, med, q3 = h.quantile([0.25, 0.5, 0.75])
+        rho = spearmanr(kept["shift"].abs(), h)[0] if len(kept) > 2 else np.nan
         return [label, len(g), int(g["excluded"].sum()), num(med), f"{num(q1)} to {num(q3)}",
-                pct((h > 20).mean(), 0), pct((kept["half_life_ci_low"] > 20).mean(), 0)]
+                pct((h > 20).mean(), 0), pct((kept["half_life_ci_low"] > 20).mean(), 0),
+                num(kept["shift"].abs().median()), f"{rho:.2f}"]
 
     for label, freq, mdl in [("ARMA(1,1) weekly, 3-year windows", "weekly", "arma11"),
                              ("ARMA(1,1) daily, 2-year windows", "daily", "arma11"),
@@ -497,22 +593,38 @@ def t_rolling(d: dict) -> str:
         g = r[(r["frequency"] == freq) & (r["model"] == mdl)]
         rows.append(summary(label, g))
         key(f"Rolling {label}", f"median {rows[-1][3]}, IQR {rows[-1][4]}, >20 days {rows[-1][5]}, "
-            f"lower bound >20 {rows[-1][6]}, windows {rows[-1][1]}, excluded {rows[-1][2]}", "mean_reversion_results.csv")
+            f"lower bound >20 {rows[-1][6]}, windows {rows[-1][1]}, excluded {rows[-1][2]}, "
+            f"rank correlation with abs level shift {rows[-1][8]}", "mean_reversion_results.csv")
     weekly = r[(r["frequency"] == "weekly") & (r["model"] == "arma11")]
     for label, a, b in ROLLING_GROUPS:
         g = weekly[(weekly["end"] >= a) & (weekly["end"] <= f"{b}-12-31")]
         rows.append(summary(f"ARMA(1,1) weekly, windows ending {label}", g))
-        key(f"Rolling weekly ARMA median, windows ending {label}", rows[-1][3], "mean_reversion_results.csv")
-    below = weekly[~weekly["excluded"] & (weekly["half_life_days"] < 20)]
+        key(f"Rolling weekly ARMA, windows ending {label}",
+            f"median {rows[-1][3]}, median abs shift {rows[-1][7]}, rank correlation {rows[-1][8]}",
+            "mean_reversion_results.csv")
+    small = weekly[weekly["shift"].abs() < SMALL_SHIFT]
+    rows.append(summary(f"ARMA(1,1) weekly, windows with abs level shift < {SMALL_SHIFT:g} points", small))
+    key("Rolling weekly ARMA, small level shift", f"windows {rows[-1][1]}, median {rows[-1][3]}, IQR {rows[-1][4]}, "
+        f">20 days {rows[-1][5]}, lower bound >20 {rows[-1][6]}", "mean_reversion_results.csv")
+    kept = weekly[~weekly["excluded"]]
+    rho, pv = spearmanr(kept["shift"].abs(), kept["half_life_days"])
+    key("Rank correlation abs level shift vs weekly ARMA half-life", f"{rho:.2f} (nominal p {pv:.1e}, overlapping windows)",
+        "mean_reversion_results.csv, premium_prev_ny.csv")
+    levels = [weekly_premium.loc[a:b].mean() for a, b in zip(kept["start"], kept["end"])]
+    key("Rank correlation window mean level vs weekly ARMA half-life", f"{spearmanr(levels, kept['half_life_days'])[0]:.2f}",
+        "mean_reversion_results.csv, premium_prev_ny.csv")
+    below = kept[kept["half_life_days"] < 20]
     key("Weekly ARMA windows below 20 days", f"{len(below)}, ending {below['end'].min().date()} to "
         f"{below['end'].max().date()}", "mean_reversion_results.csv")
     daily = r[(r["frequency"] == "daily") & (r["model"] == "arma11") & ~r["excluded"]].set_index("end")
-    both = weekly[~weekly["excluded"]].set_index("end").join(daily, lsuffix="_w", rsuffix="_d", how="inner")
+    both = kept.set_index("end").join(daily, lsuffix="_w", rsuffix="_d", how="inner")
     key("Median weekly/daily ratio, rolling", num((both["half_life_days_w"] / both["half_life_days_d"]).median(), 1),
         "mean_reversion_results.csv")
     return md(pd.DataFrame(rows, columns=["Estimate (`prev_ny`, half-life in trading days)", "Windows", "Excluded",
                                           "Median", "Interquartile range", "Share > 20 days",
-                                          "Share with lower 95% bound > 20 days"]))
+                                          "Share with lower 95% bound > 20 days",
+                                          "Median abs level shift in window (points)",
+                                          "Rank correlation: abs level shift vs half-life"]))
 
 
 def t_chow(d: dict) -> str:
@@ -558,6 +670,12 @@ def t_issues(d: dict) -> str:
            for lab, a, b in ROLLING_GROUPS}
     placebo, cand = mr_rows(d, "chow_placebo"), mr_rows(d, "chow")
     noise = comp["prev_ny"]
+    weekly_premium = to_weekly(d["prev"]["premium"])
+    shifts = pd.Series([level_shift(weekly_premium, a, b) for a, b in zip(wk["start"], wk["end"])], index=wk.index)
+    shift_rho = spearmanr(shifts.abs(), wk["half_life_days"])[0]
+    small_hl = wk.loc[shifts.abs() < SMALL_SHIFT, "half_life_days"]
+    means = d["prev"]["premium"].loc[MONTHLY_START:MONTHLY_END]
+    means = means.groupby(means.index.to_period("M")).mean()
     rows = [
         ["a) Errors in the Yahoo exchange rate",
          f"{len(d['removed'])} impossible values (outside [{FX_MIN:g}, {FX_MAX:g}]) gave premiums down to "
@@ -585,15 +703,18 @@ def t_issues(d: dict) -> str:
          "Sub-period boundaries were read from the premium chart, so agreement within them may be selected",
          "Rolling 3-year windows with a monthly step, no manual split",
          f"Weekly ARMA median {num(wk['half_life_days'].median())} days, above 20 days in "
-         f"{pct((wk['half_life_days'] > 20).mean(), 0)} of windows, but from {num(grp['2017-2019'])} "
-         f"(windows ending 2017-2019) to {num(grp['2024-2026'])} (ending 2024-2026)"],
+         f"{pct((wk['half_life_days'] > 20).mean(), 0)} of windows; its variation across windows "
+         f"({num(grp['2017-2019'])} to {num(grp['2024-2026'])} days) tracks level shifts inside the windows "
+         f"(rank correlation {shift_rho:.2f}); windows with a shift below {SMALL_SHIFT:g} points: median "
+         f"{num(small_hl.median())} days"],
         ["e) Chow test at chosen break dates",
          f"Rejection at the April-May 2026 dates (p {pval(cand['chow_pvalue'].min())} to "
          f"{pval(cand['chow_pvalue'].max())}); placebo dates reject too (all {len(placebo)}, "
          f"p at most {pval(placebo['chow_pvalue'].max())})",
-         "Results reported as not conclusive; no break claimed",
+         "Results reported as not conclusive; the timing of the 2026 decline is read from monthly means instead",
          f"Break at the candidate dates: claimed -> not conclusive ({len(placebo)} of {len(placebo)} "
-         f"placebo dates reject)"],
+         f"placebo dates reject); monthly mean {pct(means[pd.Period('2025-12')])} in December 2025, "
+         f"{pct(means[pd.Period('2026-01')])} in January 2026"],
     ]
     return md(pd.DataFrame(rows, columns=["Issue", "How it was detected", "Fix", "Impact (before -> after)"]),
               ["l", "l", "l", "l"])
@@ -611,9 +732,10 @@ def t_key_figures(_: dict) -> str:
 
 
 TABLES_IN_ORDER = [
-    ("data_sources", t_data_sources), ("manual_check", t_manual_check), ("fx_gross_errors", t_fx_gross_errors),
+    ("data_sources", t_data_sources), ("manual_check", t_manual_check), ("manual_check_detail", t_manual_check_detail),
+    ("monthly", t_monthly), ("fx_gross_errors", t_fx_gross_errors),
     ("fx_gap_by_year", t_fx_gap_by_year), ("fx_verdicts", t_fx_verdicts), ("fx_shifts", t_fx_shifts),
-    ("fx_impact", t_fx_impact), ("closing_times", t_closing_times), ("asynchrony", t_asynchrony),
+    ("fx_impact", t_fx_impact), ("closing_times", t_closing_times), ("asynchrony", t_asynchrony), ("weekdays", t_weekdays),
     ("jumps", t_jumps), ("example", t_example), ("stationarity", t_stationarity), ("ar1_naive", t_ar1_naive),
     ("simulation", t_simulation), ("arma", t_arma), ("rolling", t_rolling), ("chow", t_chow),
     ("issues", t_issues), ("versions", t_versions), ("key_figures", t_key_figures),
