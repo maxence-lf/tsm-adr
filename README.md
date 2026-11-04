@@ -141,8 +141,17 @@ constant.
   2025 (p from 1e-14 to 3e-4): the pooled "before" regime spans premiums from 1% to
   20%, and the AR(1) residuals are autocorrelated. The results are not conclusive.
 - **Dating the level drop.** On data since 2024, the test is already significant at
-  2026-01-02 (p = 0.001). The level drop starts in January 2026, before the FSC
-  decision, and cannot be dated precisely with this method.
+  2026-01-02 (p = 0.001), so the level drop starts in January 2026. On 23 April 2026,
+  Taiwan's Financial Supervisory Commission announced that the cap on a single
+  stock in an equity fund would be raised from 10% to 25% (Bloomberg, 23 April 2026;
+  Focus Taiwan, 24 April 2026). The exact effective date was not verified. The drop
+  therefore began before this announcement; the decision may have accentuated it,
+  but these tests cannot isolate its effect.
+
+### References
+- Bloomberg, 23 April 2026:
+  https://www.bloomberg.com/news/articles/2026-04-23/taiwan-to-ease-limits-on-active-funds-investments-in-tsmc
+- Focus Taiwan, 24 April 2026: https://focustaiwan.tw/business/202604240013
 
 ## Reproduce
 Requires Python 3.12.
