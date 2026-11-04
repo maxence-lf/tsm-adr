@@ -39,6 +39,11 @@ TABLES = ROOT / "report" / "tables"
 REPORT = ROOT / "report" / "interim_report.md"
 
 MANUAL_CHECK_DATE = "2026-06-23"
+# Values reported by two news articles of 23 June 2026 (secondary sources):
+# https://ts2.tech/en/tsmc-drops-6-key-investor-trend-cant-be-missed/
+# https://stockti.com/tsmc-adr-premium-shrinks-sparking-6-slide-in-us-shares
+# The ADR price is intraday (the ts2.tech article is datelined 15:48 New York time).
+ARTICLE = {"adr": 439.78, "local": 2490.0, "fx": 31.625, "premium": 0.117, "premium_previous_close": 0.179}
 EXAMPLE_START, EXAMPLE_END = "2025-04-07", "2025-04-16"
 JUMP_THRESHOLD = 10.0  # percentage points of daily change
 NOISE_PERIOD = ("2011", "2016")
@@ -156,6 +161,30 @@ def t_manual_check(d: dict) -> str:
          pct(t["adr_same_day"] / local_usd_same - 1, 2), "computed"],
         ["Yahoo TWD=X on `adr_date`, for comparison", num(yahoo_fx, 4), "`raw_closes.csv`"],
     ]
+    # Comparison with the news reports, which use Taipei d against NY d: the same_day definition.
+    a = ARTICLE
+    article_local_usd = ADR_RATIO * a["local"] / a["fx"]
+    article_premium = a["adr"] / article_local_usd - 1
+    adr_effect = a["adr"] / local_usd_same - 1
+    fx_effect = t["adr_same_day"] / article_local_usd - 1
+    previous = d["table"].loc[str(t["adr_date_used_prev_ny"]), "premium_same_day_pct"]
+    rows += [
+        ["News reports: TSM intraday price (USD)", num(a["adr"], 2), "news reports"],
+        ["News reports: 2330.TW close (TWD) / USD/TWD", f"{num(a['local'], 1)} / {num(a['fx'], 3)}", "news reports"],
+        ["News reports: premium", pct(a["premium"], 1), "news reports"],
+        [f"Recomputed from the reported inputs: {num(a['adr'], 2)} / ({ADR_RATIO} x {num(a['local'], 1)} / "
+         f"{num(a['fx'], 3)}) - 1", pct(article_premium, 2), "computed"],
+        ["Reported ADR price with FRED rate on d", pct(adr_effect, 2), "computed"],
+        ["TSM close with reported rate", pct(fx_effect, 2), "computed"],
+        ["`same_day` premium (TSM close, FRED rate)", pct(t["adr_same_day"] / local_usd_same - 1, 2), "pipeline"],
+        ["News reports: premium at the previous NY close", pct(a["premium_previous_close"], 1), "news reports"],
+        [f"`same_day` premium on {t['adr_date_used_prev_ny']}", f"{previous:.2f}%", "`premium_table.csv`"],
+    ]
+    key("Article premium recomputed from reported inputs", pct(article_premium, 2), "computed")
+    key("Reported ADR price with FRED rate", pct(adr_effect, 2), "computed")
+    key("TSM close with reported rate", pct(fx_effect, 2), "computed")
+    key("TSM close vs reported intraday price", pct(t["adr_same_day"] / a["adr"] - 1, 2), "raw_closes.csv")
+    key("same_day premium on previous NY date", f"{previous:.2f}%", "premium_table.csv")
     key("Manual check prev_ny premium", pct(premium, 2), "computed from raw_closes.csv, fx_fred.csv")
     key("Manual check same_day premium", pct(t["adr_same_day"] / local_usd_same - 1, 2), "computed")
     key("Manual check TSM change on d", pct(t["adr_same_day"] / adr_prev - 1, 1), "raw_closes.csv")
