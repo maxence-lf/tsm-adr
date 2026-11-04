@@ -20,7 +20,7 @@ AR_PARAMS = 2  # constant and slope of the AR(1) regression
 def adf_kpss(series: pd.Series) -> dict:
     """ADF (lags chosen by AIC, H0: unit root) and KPSS (H0: level stationary)."""
     s = series.dropna()
-    adf_stat, adf_p, adf_lags, *_ = adfuller(s, regression="c", autolag="AIC")
+    adf_stat, adf_p, adf_lags, *_ = adfuller(s, regression="c", autolag="AIC", result_object=False)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", InterpolationWarning)
         kpss_stat, kpss_p, kpss_lags, _ = kpss(s, regression="c", nlags="auto")
