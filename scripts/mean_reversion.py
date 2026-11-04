@@ -38,6 +38,10 @@ CHOW_PLACEBO_DATES = ["2013-01-04", "2016-01-01", "2018-01-05", "2020-01-03",
                       "2022-01-07", "2024-01-05", "2025-01-03"]
 CHOW_LOCAL_START = "2024-01-01"
 CHOW_LOCAL_DATES = ["2025-01-03", "2025-07-04", "2026-01-02"] + CHOW_DATES
+# Every Chow result is reported as not conclusive: the full-history test rejects at
+# every placebo date, and the AR(1) residuals are autocorrelated, which breaks the
+# assumptions behind its F distribution.
+CHOW_VERDICT = "not conclusive: rejects at every placebo date, AR(1) residuals autocorrelated"
 SUBPERIODS = [
     ("2010-2019", "2010-01-01", "2019-12-31"),
     ("2020-2023", "2020-01-01", "2023-12-31"),
@@ -121,11 +125,11 @@ def chow(series: dict[str, pd.Series]) -> list[dict]:
     rows = []
     for analysis, x, date in runs:
         out = chow_test(x, date)
+        short = f"; only {out['n_after']} weeks after the date (< {MIN_WEEKS})" if out["n_after"] < MIN_WEEKS else ""
         rows.append({
             "analysis": analysis, "definition": "prev_ny", "frequency": "weekly", "label": date,
             "start": x.first_valid_index().date(), **out,
-            "note": f"only {out['n_after']} weeks after the date (< {MIN_WEEKS}): not conclusive"
-                    if out["n_after"] < MIN_WEEKS else "",
+            "conclusive": False, "note": CHOW_VERDICT + short,
         })
     return rows
 
@@ -247,11 +251,13 @@ def main() -> None:
     titles = {"chow": "Chow test, prev_ny weekly AR(1), full history",
               "chow_placebo": "Placebo dates, full history",
               "chow_since_2024": f"Sample from {CHOW_LOCAL_START} only"}
+    print(f"\nCHOW TESTS ARE NOT CONCLUSIVE: {CHOW_VERDICT.split(': ', 1)[1]}.")
     for analysis, title in titles.items():
-        print(f"\n{title}")
+        print(f"\n{title} (not conclusive)")
         for b in (b for b in breaks if b["analysis"] == analysis):
+            short = f", only {b['n_after']} weeks after" if b["n_after"] < MIN_WEEKS else ""
             print(f"  {b['label']}: F={b['chow_f']:.2f} p={b['chow_pvalue']:.2g} "
-                  f"(weeks before {b['n_before']}, after {b['n_after']}) {b['note']}")
+                  f"(weeks before {b['n_before']}, after {b['n_after']}{short})")
 
     print("\nSub-periods, weekly")
     for s in pd.DataFrame(subs).itertuples():
