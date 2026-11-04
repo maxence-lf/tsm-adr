@@ -171,7 +171,7 @@ Requires Python 3.12.
 ## Roadmap
 - [x] Data pipeline and premium construction (two alignments, unit tests)
 - [x] Asynchrony diagnostics and choice of reference definition
-- [x] Stationarity, mean reversion (ADF, AR(1)/OU half-life), structural breaks
+- [x] Stationarity, mean reversion (ADF, AR(1), ARMA(1,1) half-life); structural breaks tested, not conclusive
 - [ ] Explanatory factors (flows, FX, relative US/Taiwan returns)
 - [ ] Walk-forward strategy with transaction costs, bootstrapped Sharpe
 - [ ] Extension to other Taiwanese ADRs (UMC, ASE, Chunghwa Telecom)
