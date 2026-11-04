@@ -330,8 +330,13 @@ def main() -> None:
     models = model_comparison(series)
     roll_arma = rolling_arma(series)
     table = pd.DataFrame(full + roll + breaks + subs + models + roll_arma)
-    # Only rolling ARMA rows define it: False elsewhere keeps the column boolean in the CSV.
-    table["excluded"] = table["excluded"].eq(True)
+    # Boolean on every row so the CSV reads back as boolean. Flags that only apply to
+    # some analyses (rolling ARMA exclusion, Chow verdict, KPSS table bound) are False
+    # elsewhere. OLS fits have no iterative optimiser, so their rows count as converged,
+    # as the AR(1) rows of the model comparison already do.
+    for flag in ("excluded", "conclusive", "kpss_pvalue_is_bound"):
+        table[flag] = table[flag].eq(True)
+    table["converged"] = table["converged"].ne(False)
     out_csv = ROOT / "data" / "mean_reversion_results.csv"
     table.to_csv(out_csv, index=False)
 
