@@ -19,6 +19,8 @@ sys.path.insert(0, str(ROOT / "src"))
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
+from matplotlib.ticker import FixedLocator, NullFormatter, ScalarFormatter
 
 from adr_premium.clean import prepare_fred_fx
 from adr_premium.data import download, download_fred_fx
@@ -226,14 +228,26 @@ def plot_rolling_arma(rows: list[dict], out: Path) -> None:
         if model == "arma11":
             ax.plot(g["end"], g["half_life_ci_low"].where(~g["excluded"]), color=color, ls=":", lw=1.0,
                     label=f"ARMA(1,1) {freq}, lower 95% bound")
-    for end in t.loc[t["excluded"], "end"].unique():
-        ax.axvspan(end - pd.Timedelta(days=15), end + pd.Timedelta(days=15), color="0.85", lw=0, zorder=0)
+    # Excluded windows: weekly in the upper half of the plot, daily in the lower half.
+    bands = {"weekly": ("#d95f02", 0.5, 1.0), "daily": ("#1f77b4", 0.0, 0.5)}
+    handles, labels = ax.get_legend_handles_labels()
+    for freq, (color, ymin, ymax) in bands.items():
+        ends = t.loc[t["excluded"] & (t["frequency"] == freq), "end"].unique()
+        for end in ends:
+            ax.axvspan(end - pd.Timedelta(days=15), end + pd.Timedelta(days=15), ymin=ymin, ymax=ymax,
+                       color=color, alpha=0.18, lw=0, zorder=0)
+        handles.append(Patch(color=color, alpha=0.18, lw=0))
+        labels.append(f"Excluded {freq} window ({len(ends)})")
     ax.axhline(HALF_LIFE_THRESHOLD, color="black", lw=0.6)
+    # Log scale: the spikes reach hundreds of days and would flatten the rest.
     ax.set_yscale("log")
-    ax.set_ylabel("Half-life (trading days)")
-    ax.set_title("prev_ny half-life on rolling windows, monthly step (grey: excluded windows)")
+    ax.yaxis.set_major_locator(FixedLocator([1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000]))
+    ax.yaxis.set_major_formatter(ScalarFormatter())
+    ax.yaxis.set_minor_formatter(NullFormatter())
+    ax.set_ylabel("Half-life (trading days, log scale)")
+    ax.set_title("prev_ny half-life on rolling windows, monthly step")
     ax.grid(alpha=0.3)
-    ax.legend(frameon=False, fontsize=8, ncol=2)
+    ax.legend(handles, labels, frameon=False, fontsize=8, ncol=2)
     fig.tight_layout()
     fig.savefig(out, dpi=150)
 
