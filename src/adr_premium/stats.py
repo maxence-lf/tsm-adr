@@ -11,10 +11,13 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 from scipy import stats as sps
-from statsmodels.tools.sm_exceptions import InterpolationWarning
+from statsmodels.stats.diagnostic import acorr_ljungbox
+from statsmodels.tools.sm_exceptions import ConvergenceWarning, InterpolationWarning
+from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.stattools import adfuller, kpss
 
 AR_PARAMS = 2  # constant and slope of the AR(1) regression
+LJUNG_BOX_LAGS = 4
 
 
 def adf_kpss(series: pd.Series) -> dict:
@@ -55,6 +58,16 @@ def _half_life(phi: float) -> float:
     return np.log(0.5) / np.log(phi)
 
 
+def _residual_checks(resid: pd.Series, model_df: int) -> dict:
+    """Lag-1 autocorrelation and Ljung-Box p-value of residuals.
+
+    ``resid`` keeps NaN where the series has gaps, so the lag-1 autocorrelation never
+    pairs values across a gap. Ljung-Box needs a gap-free series and drops them.
+    """
+    lb = acorr_ljungbox(resid.dropna(), lags=[LJUNG_BOX_LAGS], model_df=model_df)
+    return {"resid_autocorr": resid.autocorr(lag=1), "ljungbox_pvalue": float(lb["lb_pvalue"].iloc[0])}
+
+
 def ar1_half_life(series: pd.Series) -> dict:
     """Fit dp_t = a + b p_{t-1} by OLS; phi = 1 + b. The 95% CI comes from the CI of b."""
     pairs = _ar1_pairs(series)
@@ -68,12 +81,53 @@ def ar1_half_life(series: pd.Series) -> dict:
         "half_life_ci_low": _half_life(1 + b_low),
         "half_life_ci_high": _half_life(1 + b_high),
         "r2": fit.rsquared,
+        **_residual_checks(fit.resid.reindex(series.index), model_df=1),
+    }
+
+
+def arma11_half_life(series: pd.Series) -> dict:
+    """Fit an ARIMA(1,0,1) with constant: an AR(1) signal observed with white noise.
+
+    phi is the persistence of the signal and theta (negative under measurement noise)
+    absorbs the noise. The 95% CI on the half-life comes from the CI of phi. Gaps
+    (NaN) are handled as missing values by the Kalman filter, so no change is ever
+    computed across them. The index is dropped because trading days are irregular.
+    """
+    values = series.loc[series.first_valid_index():series.last_valid_index()].to_numpy(dtype=float)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", ConvergenceWarning)
+        fit = ARIMA(values, order=(1, 0, 1), trend="c").fit()
+    names = list(fit.model.param_names)
+    phi, theta = fit.params[names.index("ar.L1")], fit.params[names.index("ma.L1")]
+    phi_low, phi_high = fit.conf_int(0.05)[names.index("ar.L1")]
+    # The first residual carries the filter initialisation, not a one-step forecast error.
+    resid = pd.Series(fit.resid).where(~np.isnan(values)).iloc[1:]
+    return {
+        "n": int(np.isfinite(values).sum()),
+        "phi": phi,
+        "theta": theta,
+        "half_life": _half_life(phi),
+        "half_life_ci_low": _half_life(phi_low),
+        "half_life_ci_high": _half_life(phi_high),
+        "converged": not any(issubclass(w.category, ConvergenceWarning) for w in caught),
+        **_residual_checks(resid, model_df=2),
     }
 
 
 def to_weekly(series: pd.Series) -> pd.Series:
     """Last observation of each week, dated on its Friday. Empty weeks stay NaN."""
     return series.resample("W-FRI").last()
+
+
+def to_weekly_mean(series: pd.Series) -> pd.Series:
+    """Mean of each week, dated on its Friday. Empty weeks stay NaN.
+
+    Averaging is itself a source of autocorrelation: consecutive weekly means of a
+    persistent series are smoother than point samples, and the changes of averaged
+    data are positively autocorrelated (Working, 1960) even without mean reversion.
+    Use it as a control only, not as a better estimate.
+    """
+    return series.resample("W-FRI").mean()
 
 
 def chow_test(series: pd.Series, break_date) -> dict:
