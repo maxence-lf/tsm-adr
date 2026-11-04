@@ -121,18 +121,37 @@ windows ending in 2024-2026 have a median of 158 days. The daily ARMA on 2-year
 windows has a median of 38 days and is usually shorter than the weekly estimate
 (median ratio 1.9).
 
+These rolling estimates have two biases of opposite sign. A window that contains a
+change of level inflates phi: across windows, the rank correlation between the level
+shift (mean of the last year minus mean of the first year) and the half-life is 0.86.
+Part of this correlation is mechanical: a simulated AR(1) plus noise without any
+regime change, calibrated on the real series, gives 0.35 for a true half-life of 32
+days and 0.48 for 70 days, but never 0.86 in 100 replications, so level shifts also
+contribute. In the 70 windows where the level moves by less than 2 points, the median
+half-life is 32.3 days, but selecting such windows favours fast reversions: in the
+simulation, a true half-life of 32 days gives a stable-window median at least that
+high in only 2% of replications. Code: `scripts/simulate_level_shift.py`.
+
 ![Rolling ARMA(1,1) and AR(1) half-lives of the prev_ny premium](figures/rolling_arma_half_life.png)
 
-**Conclusion.** Corrected for asynchrony noise, the half-life is measured in weeks
-to months: the rolling weekly ARMA median is about 70 trading days, above 20 days in
-92% of windows, against about 9 days for the naive AR(1). It varies over time, from
-about 25 days in windows ending in 2017-2019 to about 158 days in windows ending in
-2024-2026. Untested observation: the half-life seems to lengthen when the premium
-level is high.
+**Conclusion.** Corrected for asynchrony noise, the half-life is clearly longer than
+the about 9 days of the naive AR(1). The rolling estimates give a range rather than a
+point: roughly 30 to 70 trading days, about 1.5 to 3.3 months. The lower end (32.3
+days in windows without a marked level shift) is probably a lower bound; the upper end
+(69.6 days over all windows) is inflated by level shifts but depressed by the short
+windows, so it is an indication rather than a strict upper bound. Even in stable
+windows, the lower 95% bound exceeds 20 days in only 27% of cases, so a half-life above
+20 trading days cannot be asserted with confidence. Untested observation: the variation
+of the half-life across windows may reflect level shifts inside the windows rather
+than a genuine change in the speed of reversion; any link with the level of the
+premium is confounded with this effect.
 
 **Limitations.**
 - The sub-periods were chosen after looking at the data, hence the rolling window
   above, which confirms the order of magnitude but not a stable level.
+- Rolling half-lives are inflated by level shifts inside the windows and biased
+  downwards by short windows and by the selection of stable windows; the half-life is
+  therefore given as a range.
 - Upper bounds of the confidence intervals are unreliable: they come from a Wald
   interval on phi close to 1 and are often very large or infinite.
 - Daily ARMA residuals are not white (Ljung-Box p below 0.001 in 2010-2019 and
@@ -154,6 +173,17 @@ level is high.
   but these tests cannot isolate its effect.
 
 ### References
+- Lamont, O. A. (2024). TSMC: Totally Stupid Market Chaos. Acadian Asset Management,
+  October 2024:
+  https://acadian-asset.com/investment-insights/owenomics/tsmc-totally-stupid-market-chaos
+  The ADR and the underlying shares are not fully fungible in the short term;
+  regulations have prevented the creation of new U.S. shares; shorting the ADR was
+  cheap and easy at the time of writing, but the arbitrage is a risky bet on the speed
+  of convergence.
+- Shleifer, A. and Vishny, R. W. (1997). The Limits of Arbitrage. *The Journal of
+  Finance*, 52(1), 35-55. Arbitrage is conducted by a relatively small number of
+  specialised investors who take large positions with other people's money, and it can
+  become ineffective when prices diverge far from fundamental values.
 - Bloomberg, 23 April 2026:
   https://www.bloomberg.com/news/articles/2026-04-23/taiwan-to-ease-limits-on-active-funds-investments-in-tsmc
 - Focus Taiwan, 24 April 2026: https://focustaiwan.tw/business/202604240013
