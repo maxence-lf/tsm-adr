@@ -42,7 +42,7 @@ MANUAL_CHECK_DATE = "2026-06-23"
 # Values reported by two news articles of 23 June 2026 (secondary sources):
 # https://ts2.tech/en/tsmc-drops-6-key-investor-trend-cant-be-missed/
 # https://stockti.com/tsmc-adr-premium-shrinks-sparking-6-slide-in-us-shares
-# The ADR price is intraday (the ts2.tech article is datelined 15:48 New York time).
+# Their ADR price differs from the official close in our data and is not timestamped.
 ARTICLE = {"adr": 439.78, "local": 2490.0, "fx": 31.625, "premium": 0.117, "premium_previous_close": 0.179}
 EXAMPLE_START, EXAMPLE_END = "2025-04-07", "2025-04-16"
 JUMP_THRESHOLD = 10.0  # percentage points of daily change
@@ -169,7 +169,7 @@ def t_manual_check(d: dict) -> str:
     fx_effect = t["adr_same_day"] / article_local_usd - 1
     previous = d["table"].loc[str(t["adr_date_used_prev_ny"]), "premium_same_day_pct"]
     rows += [
-        ["News reports: TSM intraday price (USD)", num(a["adr"], 2), "news reports"],
+        ["News reports: TSM price (USD), not timestamped", num(a["adr"], 2), "news reports"],
         ["News reports: 2330.TW close (TWD) / USD/TWD", f"{num(a['local'], 1)} / {num(a['fx'], 3)}", "news reports"],
         ["News reports: premium", pct(a["premium"], 1), "news reports"],
         [f"Recomputed from the reported inputs: {num(a['adr'], 2)} / ({ADR_RATIO} x {num(a['local'], 1)} / "
@@ -183,7 +183,7 @@ def t_manual_check(d: dict) -> str:
     key("Article premium recomputed from reported inputs", pct(article_premium, 2), "computed")
     key("Reported ADR price with FRED rate", pct(adr_effect, 2), "computed")
     key("TSM close with reported rate", pct(fx_effect, 2), "computed")
-    key("TSM close vs reported intraday price", pct(t["adr_same_day"] / a["adr"] - 1, 2), "raw_closes.csv")
+    key("TSM close vs reported ADR price", pct(t["adr_same_day"] / a["adr"] - 1, 2), "raw_closes.csv")
     key("same_day premium on previous NY date", f"{previous:.2f}%", "premium_table.csv")
     key("Manual check prev_ny premium", pct(premium, 2), "computed from raw_closes.csv, fx_fred.csv")
     key("Manual check same_day premium", pct(t["adr_same_day"] / local_usd_same - 1, 2), "computed")
