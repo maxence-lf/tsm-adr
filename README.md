@@ -3,14 +3,26 @@
 Measuring and modelling the premium of TSMC's NYSE-listed ADR (TSM) over its
 Taiwan-listed shares (2330.TW), and asking why arbitrage does not close it.
 
-**Status:** work in progress — data pipeline and premium construction done;
-statistical analysis under way. Target completion: February 2027.
+**Status:** work in progress. Data pipeline, mean reversion and explanatory factors
+done; trading strategy next. Target completion: February 2027.
 
 ## Research questions
 1. What drives the premium?
 2. Does it mean-revert, and how fast?
 3. Does a strategy trading it survive transaction costs?
 4. What limits arbitrage (conversion constraints, foreign ownership rules, short-selling)?
+
+## Results so far
+- **Measurement.** The two markets never trade at the same time; this asynchrony
+  adds noise that reverses the next day (daily change autocorrelation -0.44).
+  Yahoo's exchange rate has gross errors and persistent shifts, so FRED is used.
+- **Mean reversion.** The premium is not stationary over 2010-2026 (it moves between
+  level regimes). Corrected for asynchrony noise, its half-life is roughly 30 to 70
+  trading days, against about 9 for a naive AR(1).
+- **Factors.** The ADR has a higher US market beta than the local share (1.06 against
+  0.85), so the premium rises with the S&P 500 and a long local / short ADR pair has
+  a beta of about -0.20. FX is only partly passed to the premium; volumes, lagged
+  factors and foreign flows give nothing conclusive.
 
 ## Key methodological issue: non-synchronous prices
 Taipei closes at 05:30 UTC, New York at 20:00/21:00 UTC, so no pair of closing
@@ -188,6 +200,44 @@ premium is confounded with this effect.
   https://www.bloomberg.com/news/articles/2026-04-23/taiwan-to-ease-limits-on-active-funds-investments-in-tsmc
 - Focus Taiwan, 24 April 2026: https://focustaiwan.tw/business/202604240013
 
+## Explanatory factors
+Weekly data (Fridays), reference definition `prev_ny` with the FRED exchange rate,
+2010-01-04 to 2026-10-23, 852 weeks. The dependent variable is the weekly change of
+q = ln(1 + premium). The main model, specified before estimation, regresses it on the
+S&P 500 log return (read on the ADR's NY date) and the change in log FX (TWD per USD).
+All standard errors are Newey-West. These are contemporaneous regressions: they
+describe co-movement within the week, not forecasts. Code: `scripts/factors.py`,
+results in `data/factor_results.csv`.
+
+**Robust: the ADR carries more US market risk than the local share.** The S&P 500
+beta is 1.06 for the ADR against 0.85 for the local share in USD. In the main model,
+the premium's S&P 500 coefficient is 0.24 [0.17, 0.31]. It is 0.21 to 0.37 in the
+three sub-periods up to April 2026, with 95% intervals excluding 0, and positive in
+all 167 rolling 3-year windows (interval excluding 0 in 66% of them); the 26 weeks
+since May 2026 are too few to conclude. A long local / short ADR pair trade with
+equal dollar legs therefore has an S&P 500 beta of about -0.20 [-0.27, -0.14],
+negative in all rolling windows, which a strategy will have to hedge.
+
+**Partial: FX changes are not passed to the premium one for one.** A full
+pass-through (coefficient 1) is rejected (p = 2.4e-12 univariate, 2.4e-07 in the main
+model), but the size of the pass-through is not established: the coefficient is 0.10
+univariate (not different from 0), 0.36 in the main model and -0.29 on monthly data,
+and the rolling interval excludes 0 in only 17% of windows.
+
+**Not conclusive.**
+- Traded volumes: the change in the ADR / local traded-value ratio is endogenous (it
+  moves with the premium) and not significant (p = 0.19 univariate, 0.28 added to
+  the main model); it is kept out of the main model.
+- Predictive version: with factors lagged one week, R² is at most 1.4%.
+- Foreign investor flows: no documented official historical source was found.
+
+**Choice of index.** The S&P 500 was chosen a priori as the broad US market. The
+Nasdaq-100 is a robustness check: it gives the same univariate beta (0.20) and a
+slightly higher R² (5.7% against 4.3%), so the conclusions do not depend on the
+index.
+
+![Rolling S&P 500 and FX coefficients of the weekly premium change](figures/rolling_factor_betas.png)
+
 ## Reproduce
 Requires Python 3.12.
 
@@ -197,12 +247,13 @@ Requires Python 3.12.
     pytest -q
     python scripts/build_premium.py
     python scripts/mean_reversion.py
+    python scripts/factors.py
 
 ## Roadmap
 - [x] Data pipeline and premium construction (two alignments, unit tests)
 - [x] Asynchrony diagnostics and choice of reference definition
 - [x] Stationarity, mean reversion (ADF, AR(1), ARMA(1,1) half-life); structural breaks tested, not conclusive
-- [ ] Explanatory factors (flows, FX, relative US/Taiwan returns)
+- [x] Explanatory factors (US market, FX, volumes); foreign flows not available
 - [ ] Walk-forward strategy with transaction costs, bootstrapped Sharpe
 - [ ] Extension to other Taiwanese ADRs (UMC, ASE, Chunghwa Telecom)
 
