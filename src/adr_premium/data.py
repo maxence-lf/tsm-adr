@@ -16,6 +16,10 @@ from urllib.request import urlopen
 import pandas as pd
 
 TICKERS = {"adr": "TSM", "local": "2330.TW", "fx": "TWD=X"}
+# Market factors (closes) and volumes for the factor analysis, kept in a separate cache
+# so that raw_closes.csv, used by every earlier result, is never rewritten.
+MARKET_CLOSES = {"spx": "^GSPC", "ndx": "^NDX"}
+MARKET_VOLUMES = {"adr_volume": "TSM", "local_volume": "2330.TW"}
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 FRED_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DEXTAUS"
 
@@ -64,3 +68,34 @@ def download_fred_fx(refresh: bool = False) -> pd.Series:
     DATA_DIR.mkdir(exist_ok=True)
     cache.write_bytes(payload)
     return fx
+
+
+def _yahoo_column(ticker: str, column: str, start: str, end: str | None) -> pd.Series:
+    import yfinance as yf
+
+    df = yf.download(ticker, start=start, end=end, auto_adjust=False, progress=False)
+    if df.empty:
+        raise RuntimeError(f"No data for {ticker}")
+    out = df[column]
+    return out.iloc[:, 0] if isinstance(out, pd.DataFrame) else out
+
+
+def download_market(start: str = "2010-01-01", end: str | None = None, refresh: bool = False) -> pd.DataFrame:
+    """S&P 500 and Nasdaq-100 closes, TSM and 2330.TW volumes, cached in CSV.
+
+    Volumes are in ADRs for TSM and in shares for 2330.TW. A zero volume is a missing
+    value (no trading reported), not an actual zero, so it is stored as NaN.
+    """
+    cache = DATA_DIR / "market_extra.csv"
+    if cache.exists() and not refresh:
+        return pd.read_csv(cache, index_col=0, parse_dates=True)
+
+    out = {key: _yahoo_column(t, "Close", start, end) for key, t in MARKET_CLOSES.items()}
+    out |= {key: _yahoo_column(t, "Volume", start, end) for key, t in MARKET_VOLUMES.items()}
+    market = pd.concat(out, axis=1, join="outer").sort_index()
+    market.index = pd.DatetimeIndex(market.index).tz_localize(None)
+    for key in MARKET_VOLUMES:
+        market[key] = market[key].where(market[key] > 0)
+    DATA_DIR.mkdir(exist_ok=True)
+    market.to_csv(cache)
+    return market

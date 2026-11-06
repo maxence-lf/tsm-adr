@@ -67,3 +67,20 @@ def test_fred_cache_is_written_then_reused(tmp_path, monkeypatch):
 
     monkeypatch.setattr(data, "urlopen", fail)
     assert download_fred_fx().iloc[0] == 32.1
+
+
+def test_market_cache_is_reused_and_zero_volume_is_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(data, "DATA_DIR", tmp_path)
+    days = pd.to_datetime(["2026-03-02", "2026-03-03"])
+    values = {"Close": pd.Series([100.0, 101.0], index=days), "Volume": pd.Series([0.0, 5.0], index=days)}
+    monkeypatch.setattr(data, "_yahoo_column", lambda ticker, column, start, end: values[column])
+    market = data.download_market()
+    assert list(market.columns) == ["spx", "ndx", "adr_volume", "local_volume"]
+    assert np.isnan(market.loc["2026-03-02", "adr_volume"])
+    assert market.loc["2026-03-03", "local_volume"] == 5.0
+
+    def fail(*a, **k):
+        raise AssertionError("network must not be used when the cache exists")
+
+    monkeypatch.setattr(data, "_yahoo_column", fail)
+    pd.testing.assert_frame_equal(data.download_market(), market, check_freq=False, check_names=False)
