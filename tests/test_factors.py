@@ -106,3 +106,16 @@ def test_alignment_check_detects_a_factor_value_taken_from_a_later_day():
     shifted.loc[known, "ln_sp500"] = later.reindex(shifted.loc[known, "sp500_date"]).to_numpy()
     with pytest.raises(ValueError, match="do not match"):
         check_alignment(shifted, market)
+
+
+def test_pair_trade_beta_is_minus_the_premium_beta():
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from factors import pair_returns
+
+    panel, _ = _panel(8)
+    pair = pair_returns(panel)
+    beta_dq = ols_newey_west(panel["dq"], panel[["r_sp500"]])["table"].loc["r_sp500", "coef"]
+    beta_log = ols_newey_west(pair["pair_log"], pair[["r_sp500"]])["table"].loc["r_sp500", "coef"]
+    beta_simple = ols_newey_west(pair["pair_simple"], pair[["r_sp500"]])["table"].loc["r_sp500", "coef"]
+    assert beta_log == pytest.approx(-beta_dq, abs=1e-12)
+    assert beta_simple == pytest.approx(-beta_dq, abs=0.02)  # simple and log returns differ slightly

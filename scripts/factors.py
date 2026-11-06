@@ -44,6 +44,20 @@ SUBPERIODS = [
 ROLLING_WEEKS = 156  # 3 years, as in mean_reversion.py
 ROLLING_TERMS = ["r_sp500", "dln_fx"]
 MIN_OBS = 52  # below one year of weekly data, a sub-period result is flagged
+# The main multivariate model uses one US index, the S&P 500, chosen a priori as the
+# broad market index, not on fit: picking the index with the higher R2 would select the
+# model on the same data it is tested on. The S&P 500 and the Nasdaq-100 have a weekly
+# correlation of about 0.9, so entering both makes their separate coefficients
+# meaningless. The Nasdaq-100 version, with the same structure, is a robustness check;
+# the model with both indices is kept only as an appendix, flagged as collinear.
+MAIN = ["r_sp500", "dln_fx", "dln_value_ratio"]
+NDX_VARIANT = ["r_ndx", "dln_fx", "dln_value_ratio"]
+MODELS = [(f"univariate {f}", [f]) for f in FACTORS] + [
+    ("multivariate", MAIN),
+    ("robustness: Nasdaq-100 instead of S&P 500", NDX_VARIANT),
+    ("appendix: both indices (collinear)", FACTORS),
+]
+FX_TEST_MODELS = ["univariate dln_fx", "multivariate", "robustness: Nasdaq-100 instead of S&P 500"]
 LABELS = {"r_sp500": "S&P 500 return", "r_ndx": "Nasdaq-100 return", "dln_fx": "d ln FX (TWD per USD)",
           "dln_value_ratio": "d ln traded value ADR / local"}
 
@@ -82,13 +96,12 @@ def regressions(panel: pd.DataFrame, definition: str, frequency: str, timing: st
     for sample, start, end in SUBPERIODS:
         p = panel.loc[start:end]
         X = p[FACTORS].shift(shift)
-        models = [(f"univariate {f}", [f]) for f in FACTORS] + [("multivariate", FACTORS)]
-        for model, terms in models:
+        for model, terms in MODELS:
             result = ols_newey_west(p["dq"], X[terms])
             labels = dict(analysis="regression", definition=definition, frequency=frequency, timing=timing,
                           sample=sample, model=model)
             rows += rows_from(result, **labels)
-            if "dln_fx" in terms:
+            if model in FX_TEST_MODELS:
                 for value in (1, 0):
                     test = coefficient_test(result, "dln_fx", value)
                     rows.append({**labels, "analysis": "fx_test", "term": "dln_fx", "hypothesis": test["hypothesis"],
@@ -131,6 +144,96 @@ def rolling(panel: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def pair_returns(panel: pd.DataFrame) -> pd.DataFrame:
+    """Weekly return of long the local share (in USD) and short the ADR, equal dollar weights.
+
+    With simple returns the pair earns R_local_usd - R_adr per dollar of each leg; in
+    log returns the same position earns -dq exactly, so its beta is -beta(dq).
+    """
+    out = pd.DataFrame(index=panel.index)
+    out["pair_simple"] = np.expm1(panel["r_local_usd"]) - np.expm1(panel["r_adr"])
+    out["pair_log"] = panel["r_local_usd"] - panel["r_adr"]
+    out["r_sp500"] = panel["r_sp500"]
+    return out
+
+
+def pair_beta(panel: pd.DataFrame) -> list[dict]:
+    """S&P 500 beta of the pair, full sample and rolling 3-year windows (input for step 5)."""
+    pair = pair_returns(panel)
+    labels = dict(analysis="pair_beta", definition="prev_ny", frequency="weekly", timing="contemporaneous",
+                  term="r_sp500")
+    rows = []
+    for y in ("pair_simple", "pair_log"):
+        result = ols_newey_west(pair[y], pair[["r_sp500"]])
+        rows.append({**labels, "sample": "full", "model": f"{y} on r_sp500",
+                     **result["table"].loc["r_sp500"].to_dict(), "r2": result["r2"], "n": result["n"],
+                     "nw_lags": result["lags"]})
+    month_ends = pair.groupby(pair.index.to_period("M")).tail(1).index
+    for end in month_ends:
+        window = pair.loc[:end].iloc[-ROLLING_WEEKS:]
+        if len(window) < ROLLING_WEEKS:
+            continue
+        result = ols_newey_west(window["pair_simple"], window[["r_sp500"]])
+        rows.append({**labels, "analysis": "pair_beta_rolling", "sample": str(end.date()),
+                     "model": "pair_simple on r_sp500", **result["table"].loc["r_sp500"].to_dict(),
+                     "r2": result["r2"], "n": result["n"], "nw_lags": result["lags"]})
+    return rows
+
+
+def conclusions(table: pd.DataFrame) -> pd.DataFrame:
+    """Robust, partial and not conclusive findings, each with the numbers behind it."""
+    def pick(**k):
+        sel = table
+        for col, val in k.items():
+            sel = sel[sel[col] == val]
+        return sel
+
+    weekly_full = dict(definition="prev_ny", frequency="weekly", sample="full")
+    dec = pick(analysis="decomposition", sample="full").set_index("model")
+    pair_full = pick(analysis="pair_beta", sample="full", model="pair_simple on r_sp500").iloc[0]
+    pair_roll = pick(analysis="pair_beta_rolling")
+    uni = pick(analysis="regression", timing="contemporaneous", **weekly_full)
+    sp, ndx = (uni[(uni["model"] == f"univariate {f}") & (uni["term"] == f)].iloc[0] for f in ("r_sp500", "r_ndx"))
+    fx_tests = pick(analysis="fx_test", timing="contemporaneous", **weekly_full).set_index(["model", "hypothesis"])
+    fx_main = uni[(uni["model"] == "multivariate") & (uni["term"] == "dln_fx")].iloc[0]
+    fx_uni = uni[(uni["model"] == "univariate dln_fx") & (uni["term"] == "dln_fx")].iloc[0]
+    monthly_fx = pick(analysis="regression", timing="contemporaneous", definition="prev_ny", frequency="monthly",
+                      sample="full", model="univariate dln_fx", term="dln_fx").iloc[0]
+    roll_fx = pick(analysis="rolling", term="dln_fx")
+    vol = uni[(uni["model"] == "univariate dln_value_ratio") & (uni["term"] == "dln_value_ratio")].iloc[0]
+    pred = pick(analysis="regression", timing="predictive", **weekly_full)
+    pred = pred[pred["term"] != "const"]
+    reg = table[(table["analysis"] == "regression") & (table["term"] != "const")]
+
+    rows = [
+        ("robust", "The ADR has a higher beta to the US market than the local share in USD",
+         f"S&P 500 beta {dec.loc['r_adr on r_sp500', 'coef']:.2f} for the ADR against "
+         f"{dec.loc['r_local_usd on r_sp500', 'coef']:.2f} for the local share in USD; long local / short ADR "
+         f"beta {pair_full['coef']:.2f} [{pair_full['ci_low']:.2f}, {pair_full['ci_high']:.2f}]; negative in "
+         f"{(pair_roll['coef'] < 0).mean():.0%} of {len(pair_roll)} rolling windows, CI excluding 0 in "
+         f"{(pair_roll['ci_high'] < 0).mean():.0%}"),
+        ("partial", "FX changes are not passed to the premium one for one; the size of the pass-through is not established",
+         f"FX coefficient = 1 rejected (p {fx_tests.loc[('univariate dln_fx', 'dln_fx = 1'), 'pvalue']:.1e} "
+         f"univariate, {fx_tests.loc[('multivariate', 'dln_fx = 1'), 'pvalue']:.1e} multivariate); coefficient "
+         f"{fx_uni['coef']:.2f} univariate, {fx_main['coef']:.2f} multivariate, {monthly_fx['coef']:.2f} monthly; "
+         f"rolling CI excludes 1 in {((roll_fx['ci_low'] > 1) | (roll_fx['ci_high'] < 1)).mean():.0%} of windows "
+         f"but 0 in only {((roll_fx['ci_low'] > 0) | (roll_fx['ci_high'] < 0)).mean():.0%}"),
+        ("not conclusive", "Traded-value ratio",
+         f"coefficient {vol['coef']:.4f}, p {vol['pvalue']:.2f}; endogenous to the premium; Yahoo volumes not verified"),
+        ("not conclusive", "Predictive version (factors lagged one week)",
+         f"R2 at most {pred['r2'].max():.1%} on the full sample; smallest p {pred['pvalue'].min():.3f} among "
+         f"{len(reg)} coefficient tests in the whole analysis, {int((reg['pvalue'] < 0.05).sum())} below 0.05"),
+        ("not conclusive", "Foreign investor flows",
+         "not available: no documented official historical source (TWSE OpenAPI has no history; the BFI82U "
+         "web endpoint is undocumented and needs one request per day)"),
+        ("untested observation", "The premium tracks US tech slightly better than the broad market",
+         f"univariate R2 {ndx['r2']:.1%} for the Nasdaq-100 against {sp['r2']:.1%} for the S&P 500, with the same "
+         f"beta ({ndx['coef']:.2f} and {sp['coef']:.2f}), so the conclusion does not depend on the index chosen"),
+    ]
+    return pd.DataFrame([{"analysis": "conclusion", "category": c, "statement": st, "evidence": ev}
+                         for c, st, ev in rows])
+
+
 def plot_rolling(roll: pd.DataFrame, out: Path) -> None:
     fig, axes = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
     for ax, term, color in zip(axes, ROLLING_TERMS, ("#1f77b4", "#d95f02")):
@@ -153,16 +256,19 @@ def summary(table: pd.DataFrame, corr: float) -> None:
     def show(sel, title):
         print(f"\n{title}")
         cols = ["sample", "model", "term", "coef", "ci_low", "ci_high", "pvalue", "r2", "n"]
-        print(sel[cols].to_string(index=False, float_format=lambda v: f"{v:.4f}"))
+        print(sel[cols].astype({"n": "Int64"}).to_string(index=False, float_format=lambda v: f"{v:.4f}"))
 
     reg = table[table["analysis"] == "regression"]
     base = reg[(reg["definition"] == "prev_ny") & (reg["frequency"] == "weekly") & (reg["term"] != "const")]
     contemp, pred = base[base["timing"] == "contemporaneous"], base[base["timing"] == "predictive"]
     print(f"\nCorrelation of S&P 500 and Nasdaq-100 weekly returns: {corr:.2f} (multivariate coefficients on the two "
           f"are collinear)")
-    show(contemp[contemp["sample"] == "full"], "CONTEMPORANEOUS, prev_ny weekly, full sample")
+    main = contemp["model"].str.startswith("univariate") | (contemp["model"] == "multivariate")
+    show(contemp[(contemp["sample"] == "full") & main], "CONTEMPORANEOUS, prev_ny weekly, full sample")
     show(contemp[(contemp["sample"] != "full") & (contemp["model"] == "multivariate")],
          "CONTEMPORANEOUS, prev_ny weekly, multivariate by sub-period")
+    show(contemp[(contemp["sample"] == "full") & contemp["model"].str.startswith("robustness")],
+         "ROBUSTNESS: Nasdaq-100 instead of S&P 500, prev_ny weekly, full sample")
     small = contemp[(contemp["sample"] != "full") & (contemp["n"] < MIN_OBS)]["sample"].unique()
     if len(small):
         print(f"  Fewer than {MIN_OBS} observations, not conclusive: {', '.join(small)}")
@@ -170,26 +276,44 @@ def summary(table: pd.DataFrame, corr: float) -> None:
     tests = table[(table["analysis"] == "fx_test") & (table["definition"] == "prev_ny") & (table["frequency"] == "weekly")
                   & (table["timing"] == "contemporaneous")]
     print("\nFX coefficient tests (Newey-West), prev_ny weekly contemporaneous")
-    print(tests[["sample", "model", "hypothesis", "stat", "pvalue", "n"]].to_string(index=False,
+    print(tests[["sample", "model", "hypothesis", "stat", "pvalue", "n"]].astype({"n": "Int64"}).to_string(index=False,
                                                                                    float_format=lambda v: f"{v:.4f}"))
 
     dec = table[table["analysis"].isin(["decomposition", "decomposition_check"])]
     print("\nDecomposition on the S&P 500: beta(dq) = beta(r_ADR) - beta(r_local in USD)")
-    print(dec[["sample", "model", "coef", "ci_low", "ci_high", "n"]].to_string(index=False,
+    print(dec[["sample", "model", "coef", "ci_low", "ci_high", "n"]].astype({"n": "Int64"}).to_string(index=False,
                                                                               float_format=lambda v: f"{v:.4f}"))
 
     print("\n" + "=" * 100)
     print("PREDICTIVE (factors lagged one week), reported separately from the contemporaneous results")
-    show(pred[pred["sample"] == "full"], "PREDICTIVE, prev_ny weekly, full sample")
+    main_pred = pred["model"].str.startswith("univariate") | (pred["model"] == "multivariate")
+    show(pred[(pred["sample"] == "full") & main_pred], "PREDICTIVE, prev_ny weekly, full sample")
     show(pred[(pred["sample"] != "full") & (pred["model"] == "multivariate")],
          "PREDICTIVE, prev_ny weekly, multivariate by sub-period")
     print("=" * 100)
 
     rob = reg[(reg["timing"] == "contemporaneous") & (reg["sample"] == "full") & (reg["term"] != "const")
-              & ~((reg["definition"] == "prev_ny") & (reg["frequency"] == "weekly"))]
+              & ~((reg["definition"] == "prev_ny") & (reg["frequency"] == "weekly"))
+              & (reg["model"].str.startswith("univariate") | (reg["model"] == "multivariate"))]
     print("\nROBUSTNESS, contemporaneous, full sample")
     print(rob[["definition", "frequency", "model", "term", "coef", "ci_low", "ci_high", "pvalue", "r2", "n"]]
-          .to_string(index=False, float_format=lambda v: f"{v:.4f}"))
+          .astype({"n": "Int64"}).to_string(index=False, float_format=lambda v: f"{v:.4f}"))
+
+    app = contemp[(contemp["sample"] == "full") & contemp["model"].str.startswith("appendix")]
+    show(app, f"APPENDIX: both indices together, collinear (weekly correlation {corr:.2f}); separate "
+              f"coefficients are not interpretable")
+
+    pair = table[table["analysis"] == "pair_beta"]
+    roll = table[table["analysis"] == "pair_beta_rolling"]
+    print("\nPAIR TRADE EXPOSURE: long local share (USD) / short ADR, equal dollar weights, beta to the S&P 500")
+    print(pair[["model", "coef", "ci_low", "ci_high", "pvalue", "n"]].astype({"n": "Int64"}).to_string(index=False,
+                                                                               float_format=lambda v: f"{v:.4f}"))
+    print(f"  Rolling 3-year: {len(roll)} windows, beta from {roll['coef'].min():.3f} to {roll['coef'].max():.3f}, "
+          f"median {roll['coef'].median():.3f}")
+
+    print("\nCONCLUSIONS")
+    for r in table[table["analysis"] == "conclusion"].itertuples():
+        print(f"  [{r.category}] {r.statement}: {r.evidence}")
 
 
 def main() -> None:
@@ -203,8 +327,10 @@ def main() -> None:
         rows += regressions(panel, definition, frequency, "contemporaneous")
     rows += regressions(weekly, "prev_ny", "weekly", "predictive")
     rows += decomposition(weekly)
+    rows += pair_beta(weekly)
     roll = rolling(weekly)
     table = pd.concat([pd.DataFrame(rows), roll], ignore_index=True)
+    table = pd.concat([table, conclusions(table)], ignore_index=True)
     out_csv = ROOT / "data" / "factor_results.csv"
     table.to_csv(out_csv, index=False)
 
