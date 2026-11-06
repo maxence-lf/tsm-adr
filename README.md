@@ -14,7 +14,7 @@ done; trading strategy next. Target completion: February 2027.
 
 ## Results so far
 - **Measurement.** The two markets never trade at the same time; this asynchrony
-  adds noise that reverses the next day (daily change autocorrelation -0.44).
+  adds noise that reverses the next day (daily change autocorrelation -0.44 to -0.45).
   Yahoo's exchange rate has gross errors and persistent shifts, so FRED is used.
 - **Mean reversion.** The premium is not stationary over 2010-2026 (it moves between
   level regimes). Corrected for asynchrony noise, its half-life is roughly 30 to 70
