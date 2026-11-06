@@ -50,14 +50,20 @@ MIN_OBS = 52  # below one year of weekly data, a sub-period result is flagged
 # correlation of about 0.9, so entering both makes their separate coefficients
 # meaningless. The Nasdaq-100 version, with the same structure, is a robustness check;
 # the model with both indices is kept only as an appendix, flagged as collinear.
-MAIN = ["r_sp500", "dln_fx", "dln_value_ratio"]
-NDX_VARIANT = ["r_ndx", "dln_fx", "dln_value_ratio"]
+# The traded-value ratio is endogenous (trading volumes react to the premium and to
+# the same news), so it could bias the other coefficients: it is left out of the main
+# model and added only in a separate robustness model.
+MAIN = ["r_sp500", "dln_fx"]
+NDX_VARIANT = ["r_ndx", "dln_fx"]
+VALUE_VARIANT = ["r_sp500", "dln_fx", "dln_value_ratio"]
 MODELS = [(f"univariate {f}", [f]) for f in FACTORS] + [
     ("multivariate", MAIN),
     ("robustness: Nasdaq-100 instead of S&P 500", NDX_VARIANT),
-    ("appendix: both indices (collinear)", FACTORS),
+    ("robustness: with traded-value ratio", VALUE_VARIANT),
+    ("appendix: both indices (collinear)", ["r_sp500", "r_ndx", "dln_fx"]),
 ]
-FX_TEST_MODELS = ["univariate dln_fx", "multivariate", "robustness: Nasdaq-100 instead of S&P 500"]
+FX_TEST_MODELS = ["univariate dln_fx", "multivariate", "robustness: Nasdaq-100 instead of S&P 500",
+                  "robustness: with traded-value ratio"]
 LABELS = {"r_sp500": "S&P 500 return", "r_ndx": "Nasdaq-100 return", "dln_fx": "d ln FX (TWD per USD)",
           "dln_value_ratio": "d ln traded value ADR / local"}
 
@@ -201,6 +207,8 @@ def conclusions(table: pd.DataFrame) -> pd.DataFrame:
                       sample="full", model="univariate dln_fx", term="dln_fx").iloc[0]
     roll_fx = pick(analysis="rolling", term="dln_fx")
     vol = uni[(uni["model"] == "univariate dln_value_ratio") & (uni["term"] == "dln_value_ratio")].iloc[0]
+    with_vol = uni[uni["model"] == "robustness: with traded-value ratio"].set_index("term")
+    main = uni[uni["model"] == "multivariate"].set_index("term")
     pred = pick(analysis="regression", timing="predictive", **weekly_full)
     pred = pred[pred["term"] != "const"]
     reg = table[(table["analysis"] == "regression") & (table["term"] != "const")]
@@ -218,8 +226,12 @@ def conclusions(table: pd.DataFrame) -> pd.DataFrame:
          f"{fx_uni['coef']:.2f} univariate, {fx_main['coef']:.2f} multivariate, {monthly_fx['coef']:.2f} monthly; "
          f"rolling CI excludes 1 in {((roll_fx['ci_low'] > 1) | (roll_fx['ci_high'] < 1)).mean():.0%} of windows "
          f"but 0 in only {((roll_fx['ci_low'] > 0) | (roll_fx['ci_high'] < 0)).mean():.0%}"),
-        ("not conclusive", "Traded-value ratio",
-         f"coefficient {vol['coef']:.4f}, p {vol['pvalue']:.2f}; endogenous to the premium; Yahoo volumes not verified"),
+        ("not conclusive", "Traded-value ratio (separate robustness model, endogenous)",
+         f"univariate coefficient {vol['coef']:.4f}, p {vol['pvalue']:.2f}; added to the main model, coefficient "
+         f"{with_vol.loc['dln_value_ratio', 'coef']:.4f}, p {with_vol.loc['dln_value_ratio', 'pvalue']:.2f}, with the "
+         f"S&P 500 coefficient moving from {main.loc['r_sp500', 'coef']:.2f} to {with_vol.loc['r_sp500', 'coef']:.2f} "
+         f"and the FX coefficient from {main.loc['dln_fx', 'coef']:.2f} to {with_vol.loc['dln_fx', 'coef']:.2f}; "
+         f"Yahoo volumes not verified"),
         ("not conclusive", "Predictive version (factors lagged one week)",
          f"R2 at most {pred['r2'].max():.1%} on the full sample; smallest p {pred['pvalue'].min():.3f} among "
          f"{len(reg)} coefficient tests in the whole analysis, {int((reg['pvalue'] < 0.05).sum())} below 0.05"),
