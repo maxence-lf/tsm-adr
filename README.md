@@ -4,8 +4,8 @@ Measuring and modelling the premium of TSMC's NYSE-listed ADR (TSM) over its
 Taiwan-listed shares (2330.TW), and asking why arbitrage does not close it.
 
 **Status:** work in progress. Data pipeline, mean reversion, explanatory factors,
-trading strategy and out-of-sample test on three other Taiwanese ADRs done. Target
-completion: February 2027.
+trading strategy, out-of-sample test on three other Taiwanese ADRs and synthesis of the
+limits to arbitrage done; short final report next. Target completion: February 2027.
 
 ## Research questions
 1. What drives the premium?
@@ -446,6 +446,89 @@ premium fell from about 46% to 2% by mid-2011.
 
 ![Weekly prev_ny premium of UMC, ASE and Chunghwa](figures/step6_premiums.png)
 
+## Limits to arbitrage (step 7)
+A synthesis of steps 1 to 6: no new hypothesis is tested. Each statement refers to an
+earlier step or to a source; the no-arbitrage band is a derived calculation.
+
+**Conversion.** Lamont (2024) writes that the ADR and the underlying "are not fully
+fungible in the short-term" because of "regulations that prevent the creation of new
+U.S. shares and limit the ability of U.S. investors to buy in Taiwan". TSMC's 20-F for
+2025 (filed 2026-04-16) is more precise: "We, or the foreign depositary bank, may not
+increase the number of depositary receipts by depositing shares in a depositary receipt
+facility or issuing additional depositary receipts against these deposits without
+specific R.O.C. FSC approval, except in limited circumstances", namely stock dividends,
+pre-emptive rights and deposits of shares bought on the market; for the latter, "the
+total number of deposited shares outstanding after an issuance [...] may not exceed the
+number of deposited shares previously approved by the R.O.C. FSC" and new issuances
+are "permitted to the extent that previously issued depositary receipts have been
+cancelled and the underlying shares have been withdrawn". Withdrawal is possible, but
+a non-R.O.C. holder must register with the Taiwan Stock Exchange and appoint a local
+agent and custodian. The buy-local, create-ADR, sell-ADR trade that would close a
+premium is therefore capped by past withdrawals, while the reverse trade, which would
+close a discount, is not. The 2026 20-F filings of UMC, ASE and Chunghwa describe the
+same rule (Chunghwa refers to the Securities and Futures Bureau); UMC adds: "As a
+result of the limited ability to deposit common shares into our ADS program, the
+prevailing market price of our ADSs [...] may differ from the prevailing market price
+of the equivalent number of our common shares". ASE's and Chunghwa's depositary charge
+up to US$5.00 per 100 ADSs issued or cancelled.
+
+**Costs** (step 5). Trading the premium without converting, the TSMC strategy's gross
+edge is 109 bp per round trip (per 1 USD per leg) against all-in costs of 82 bp with
+the default costs, 52 bp with institutional costs and 32 bp with the tax alone. Taiwan's
+transaction tax is 39% of the default costs and 61% of the institutional ones; its rate,
+0.3% of the sale proceeds, is stated in TSMC's 20-F, which adds that "transfers of ADSs
+are not subject to R.O.C. securities transaction tax". On UMC, ASE and Chunghwa the tax
+is 35% to 38% of the default costs (step 6).
+
+**Slowness** (steps 3 and 6). Corrected for asynchrony noise, TSMC's premium has a
+half-life of roughly 30 to 70 trading days. Out of sample the median weekly ARMA
+half-life ranges from 4.4 trading days for Chunghwa to 32.9 for UMC and 120.6 for ASE
+(69.6 for TSMC on the same windows).
+
+**Risk** (steps 4 and 5). A long local / short ADR pair has an S&P 500 beta of about
+-0.20 [-0.27, -0.14]. Hedging it with the index leaves the strategy's weekly volatility
+almost unchanged (10.5% to 10.3%). The premium can widen before it converges: the net
+TSMC strategy has a maximum drawdown of -0.25 per 1 USD per leg. This is the risk
+Shleifer and Vishny (1997) describe: arbitrage becomes ineffective when prices diverge
+far from fundamental values.
+
+**No-arbitrage band (derived).** If a deviation D of the premium from its mean decays
+with half-life h, a position held T trading days captures on average
+D (1 - 0.5^(T/h)) and pays the round-trip cost C plus the borrow fee b T / 252. The
+break-even deviation is D* = (C + b T / 252) / (1 - 0.5^(T/h)). It is computed with each
+security's median weekly ARMA half-life, the default costs (C = 70 bp, b = 0.5%) and the
+institutional costs (C = 44 bp, b = 0.25%), and compared with the weekly deviations of
+q = ln(1 + premium) from its mean over the 26 previous weeks. Code:
+`scripts/arbitrage_band.py`, results in `data/arbitrage_band.csv`.
+
+| Security | h (trading days) | D*, default, T = h | D*, default, T = 2h | D*, institutional, T = h | D*, institutional, T = 2h | Weeks above D* (default, T = h) |
+|---|---:|---:|---:|---:|---:|---:|
+| TSMC | 69.6 | 1.68 | 1.30 | 1.02 | 0.77 | 23% |
+| UMC | 32.9 | 1.53 | 1.11 | 0.95 | 0.67 | 19% |
+| ASE | 120.6 | 1.88 | 1.57 | 1.12 | 0.91 | 22% |
+| Chunghwa | 4.4 | 1.42 | 0.96 | 0.89 | 0.60 | 4% |
+
+D* is in points of q (about percentage points of premium). On these numbers the
+observed deviations exceed the band often, but the deviations are measured on the
+`prev_ny` premium, whose asynchrony noise accounts for about 2.4 points per TSMC trade
+that no order can capture (step 5), more than D* itself. The band also ignores risk
+and level shifts. It gives an order of magnitude, about 1 to 2 points, not a trading
+rule.
+
+![No-arbitrage band against the deviations of the premium](figures/arbitrage_band.png)
+
+**Conclusion.** Lamont asks why arbitrageurs do not enforce the law of one price, and
+who buys the expensive stock. Demonstrated: the conversion that would close a premium is
+capped by Taiwanese regulation (20-F filings), and trading the premium's mean reversion
+without conversion does not survive realistic costs, on TSMC (net Sharpe 0.05,
+interval containing 0) and on three other Taiwanese ADRs. Derived: costs and slow
+reversion set a no-arbitrage band of about 1 to 2 points of premium, of the same order
+as the asynchrony noise in the observed premium. Demonstrated on four ADRs: the ADR
+carries more US market risk than the local share, which is consistent with demand from
+US investors, though it does not identify who buys. Exploratory: the persistence of
+the premium appears to increase with this US market exposure (step 6), a link tested on
+four securities only.
+
 ## Reproduce
 Requires Python 3.12.
 
@@ -459,6 +542,7 @@ Requires Python 3.12.
     python scripts/backtest.py
     python scripts/backtest_robustness.py
     python scripts/step6_out_of_sample.py
+    python scripts/arbitrage_band.py
 
 ## Roadmap
 - [x] Data pipeline and premium construction (two alignments, unit tests)
@@ -467,6 +551,7 @@ Requires Python 3.12.
 - [x] Explanatory factors (US market, FX, volumes); foreign flows not available
 - [x] Strategy backtest with rules fixed a priori, transaction costs, bootstrapped Sharpe, random-entry Monte-Carlo, beta hedge
 - [x] Pre-registered out-of-sample test on other Taiwanese ADRs (UMC, ASE, Chunghwa Telecom), including a signal taken at the NY close
+- [x] Synthesis of the limits to arbitrage, with a derived no-arbitrage band
 
 ## Tools
 Python, pandas, statsmodels, matplotlib, pytest. Development assisted by Claude Code.
