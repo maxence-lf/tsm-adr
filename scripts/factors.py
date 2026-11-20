@@ -33,6 +33,7 @@ from adr_premium.data import download, download_fred_fx, download_market
 from adr_premium.factors import (FACTORS, build_panel, check_alignment, coefficient_test, identity_error,
                                  newey_west_lags, ols_newey_west)
 from adr_premium.premium import premium_prev_ny, premium_same_day
+from adr_premium.securities import TSMC, Security
 
 SUBPERIODS = [
     ("full", None, None),
@@ -68,13 +69,13 @@ LABELS = {"r_sp500": "S&P 500 return", "r_ndx": "Nasdaq-100 return", "dln_fx": "
           "dln_value_ratio": "d ln traded value ADR / local"}
 
 
-def panels() -> dict[str, pd.DataFrame]:
-    raw = download()
-    market = download_market()
+def panels(security: Security = TSMC) -> dict[str, pd.DataFrame]:
+    raw = download(security=security)
+    market = download_market(security=security)
     with contextlib.redirect_stdout(io.StringIO()):
         fx, _ = prepare_fred_fx(download_fred_fx(), raw.index[0])
-    prev = premium_prev_ny(raw["adr"], raw["local"], fx)
-    same = premium_same_day(raw["adr"], raw["local"], fx)
+    prev = premium_prev_ny(raw["adr"], raw["local"], fx, ratio=security.ratio)
+    same = premium_same_day(raw["adr"], raw["local"], fx, ratio=security.ratio)
     out = {
         ("prev_ny", "weekly"): build_panel(prev, market, raw["adr"], "W-FRI"),
         ("same_day", "weekly"): build_panel(same, market, raw["adr"], "W-FRI"),

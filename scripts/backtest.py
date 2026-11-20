@@ -31,6 +31,7 @@ from adr_premium.backtest import (FINANCING_ASSUMPTION, Costs, Rules, check_divi
                                   cost_breakdown, metrics, run_backtest)
 from adr_premium.clean import prepare_fred_fx
 from adr_premium.data import download, download_dividends, download_fred_fx
+from adr_premium.securities import TSMC, Security
 
 # Same sub-periods as scripts/mean_reversion.py.
 SUBPERIODS = [
@@ -44,11 +45,11 @@ WINDOW_GRID = [13, 26, 52]
 BORROW_GRID = [0.0025, 0.005, 0.01, 0.03]
 
 
-def load():
-    raw = download()
+def load(security: Security = TSMC):
+    raw = download(security=security)
     with contextlib.redirect_stdout(io.StringIO()):  # the FX checks are reported in step 1
         fx, _ = prepare_fred_fx(download_fred_fx(), raw.index[0])
-    return raw["adr"], raw["local"], fx, download_dividends()
+    return raw["adr"], raw["local"], fx, download_dividends(security=security)
 
 
 def summarise(res, scenario: str, rules: Rules, costs: Costs) -> list[dict]:

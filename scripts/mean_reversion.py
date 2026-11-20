@@ -25,6 +25,7 @@ from matplotlib.ticker import FixedLocator, NullFormatter, ScalarFormatter
 from adr_premium.clean import prepare_fred_fx
 from adr_premium.data import download, download_fred_fx
 from adr_premium.premium import premium_prev_ny, premium_same_day
+from adr_premium.securities import TSMC, Security
 from adr_premium.stats import adf_kpss, ar1_half_life, arma11_half_life, chow_test, to_weekly, to_weekly_mean
 
 DAYS_PER_WEEK = 5
@@ -70,12 +71,13 @@ SAMPLINGS = [
 MODELS = [("ar1", ar1_half_life), ("arma11", arma11_half_life)]
 
 
-def premiums() -> dict[str, pd.Series]:
-    raw = download()
+def premiums(security: Security = TSMC) -> dict[str, pd.Series]:
+    raw = download(security=security)
     fx, _ = prepare_fred_fx(download_fred_fx(), raw.index[0])
+    r = security.ratio
     return {
-        "prev_ny": premium_prev_ny(raw["adr"], raw["local"], fx)["premium"],
-        "same_day": premium_same_day(raw["adr"], raw["local"], fx)["premium"],
+        "prev_ny": premium_prev_ny(raw["adr"], raw["local"], fx, ratio=r)["premium"],
+        "same_day": premium_same_day(raw["adr"], raw["local"], fx, ratio=r)["premium"],
     }
 
 

@@ -15,7 +15,9 @@ from urllib.request import urlopen
 
 import pandas as pd
 
-TICKERS = {"adr": "TSM", "local": "2330.TW", "fx": "TWD=X"}
+from adr_premium.securities import TSMC, Security
+
+TICKERS = {"adr": "TSM", "local": "2330.TW", "fx": "TWD=X"}  # TSMC, kept for reference
 # Market factors (closes) and volumes for the factor analysis, kept in a separate cache
 # so that raw_closes.csv, used by every earlier result, is never rewritten.
 MARKET_CLOSES = {"spx": "^GSPC", "ndx": "^NDX"}
@@ -24,16 +26,27 @@ DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 FRED_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DEXTAUS"
 
 
-def download(start: str = "2010-01-01", end: str | None = None, refresh: bool = False) -> pd.DataFrame:
-    """Return a DataFrame (columns adr, local, fx) of unadjusted closes, cached in CSV."""
-    cache = DATA_DIR / "raw_closes.csv"
+def _tickers(security: Security) -> dict[str, str]:
+    return {"adr": security.adr, "local": security.local, "fx": "TWD=X"}
+
+
+def download(start: str | None = None, end: str | None = None, refresh: bool = False,
+             security: Security = TSMC) -> pd.DataFrame:
+    """Return a DataFrame (columns adr, local, fx) of unadjusted closes, cached in CSV.
+
+    ``start`` and ``end`` default to the security's sample (end exclusive, as in
+    yfinance). TSMC uses the original cache file, raw_closes.csv.
+    """
+    cache = DATA_DIR / f"raw_closes{security.cache_suffix}.csv"
     if cache.exists() and not refresh:
         return pd.read_csv(cache, index_col=0, parse_dates=True)
+    start = security.start if start is None else start
+    end = security.download_end if end is None else end
 
     import yfinance as yf
 
     out = {}
-    for key, ticker in TICKERS.items():
+    for key, ticker in _tickers(security).items():
         df = yf.download(ticker, start=start, end=end, auto_adjust=False, progress=False)
         if df.empty:
             raise RuntimeError(f"No data for {ticker}")
@@ -80,18 +93,27 @@ def _yahoo_column(ticker: str, column: str, start: str, end: str | None) -> pd.S
     return out.iloc[:, 0] if isinstance(out, pd.DataFrame) else out
 
 
-def download_market(start: str = "2010-01-01", end: str | None = None, refresh: bool = False) -> pd.DataFrame:
-    """S&P 500 and Nasdaq-100 closes, TSM and 2330.TW volumes, cached in CSV.
+def download_market(start: str = "2010-01-01", end: str | None = None, refresh: bool = False,
+                    security: Security = TSMC) -> pd.DataFrame:
+    """S&P 500 and Nasdaq-100 closes, ADR and local volumes, cached in CSV.
 
-    Volumes are in ADRs for TSM and in shares for 2330.TW. A zero volume is a missing
-    value (no trading reported), not an actual zero, so it is stored as NaN.
+    Volumes are in ADRs and in local shares. A zero volume is a missing value (no
+    trading reported), not an actual zero, so it is stored as NaN. For a security other
+    than TSMC, the index closes are taken from the TSMC cache, so that every security
+    uses the same index data, and only its volumes are downloaded.
     """
-    cache = DATA_DIR / "market_extra.csv"
+    cache = DATA_DIR / f"market_extra{security.cache_suffix}.csv"
     if cache.exists() and not refresh:
         return pd.read_csv(cache, index_col=0, parse_dates=True)
 
-    out = {key: _yahoo_column(t, "Close", start, end) for key, t in MARKET_CLOSES.items()}
-    out |= {key: _yahoo_column(t, "Volume", start, end) for key, t in MARKET_VOLUMES.items()}
+    volumes = {"adr_volume": security.adr, "local_volume": security.local}
+    if security.key == TSMC.key:
+        out = {key: _yahoo_column(t, "Close", start, end) for key, t in MARKET_CLOSES.items()}
+    else:
+        index_closes = download_market()[list(MARKET_CLOSES)]
+        out = {key: index_closes[key].dropna() for key in MARKET_CLOSES}
+        start, end = security.start, security.download_end
+    out |= {key: _yahoo_column(t, "Volume", start, end) for key, t in volumes.items()}
     market = pd.concat(out, axis=1, join="outer").sort_index()
     market.index = pd.DatetimeIndex(market.index).tz_localize(None)
     for key in MARKET_VOLUMES:
@@ -114,17 +136,17 @@ def _dividend_series(ticker: str) -> pd.Series:
     return div.astype(float)
 
 
-def download_dividends(refresh: bool = False) -> pd.DataFrame:
+def download_dividends(refresh: bool = False, security: Security = TSMC) -> pd.DataFrame:
     """Ex-date cash dividends (columns adr in USD per ADR, local in TWD per share), cached in CSV.
 
     Amounts are as reported by Yahoo (gross, before any withholding tax); a missing value
     means no ex-date on that day for that line.
     """
-    cache = DATA_DIR / "dividends.csv"
+    cache = DATA_DIR / f"dividends{security.cache_suffix}.csv"
     if cache.exists() and not refresh:
         return pd.read_csv(cache, index_col=0, parse_dates=True)
 
-    out = {key: _dividend_series(TICKERS[key]) for key in ("adr", "local")}
+    out = {key: _dividend_series(_tickers(security)[key]) for key in ("adr", "local")}
     div = pd.concat(out, axis=1, join="outer").sort_index()
     div.index.name = "ex_date"
     DATA_DIR.mkdir(exist_ok=True)
