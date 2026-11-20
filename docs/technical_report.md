@@ -42,7 +42,7 @@ Section 9; p) Section 10.
 
 <!-- table:issues -->
 | Issue | How it was detected | Fix | Impact (before -> after) |
-|---|---|---|---|
+|:---|:---|:---|:---|
 | a) Errors in the Yahoo exchange rate | 2 impossible values (outside [25, 40]) gave premiums down to -93.7%; a local rule then flagged 124 dates; comparison with FRED found 406 dates with a gap above 1%, of which 87 flagged, and 9 persistent shifts | FRED DEXTAUS, taken on the NY date of the ADR used | `prev_ny` daily change std over 2011-2016: 2.09% -> 1.74%; minimum premium -93.7% -> -6.0% |
 | b) Measurement noise from non-synchronous closes | Daily changes have a lag-1 autocorrelation of -0.45; it is unchanged when Yahoo is replaced by FRED | `prev_ny` as reference; weekly sampling and a signal-plus-noise model downstream | Autocorrelation `prev_ny`: -0.453 (Yahoo) -> -0.452 (FRED): the noise is not from the exchange rate |
 | c) AR(1) half-life biased downwards | Weekly AR(1) half-lives 7.8-17.0 days against 2.2-4.1 daily; a calibrated simulation (true 34.3 days) gives 4.2 daily and 14.0 weekly | ARMA(1,1): AR(1) signal plus white measurement noise | Weekly half-life by sub-period: 7.8-17.0 (AR(1)) -> 63.1-69.1 days (ARMA) |
@@ -96,7 +96,7 @@ exploratory when it is an observation that was not tested.
 
 <!-- table:data_sources -->
 | Series | Ticker | Source | Unit | First | Last | Observations |
-|---|---|---|---|---|---|---:|
+|:---|:---|:---|:---|:---|:---|---:|
 | TSMC ADR | `TSM` | Yahoo Finance (yfinance) | USD per ADR | 2010-01-04 | 2026-10-30 | 4,233 |
 | TSMC ordinary share | `2330.TW` | Yahoo Finance (yfinance) | TWD per share | 2010-01-04 | 2026-10-30 | 4,112 |
 | USD/TWD, comparison only | `TWD=X` | Yahoo Finance (yfinance) | TWD per USD | 2010-01-04 | 2026-10-30 | 4,380 |
@@ -132,7 +132,7 @@ case.
 
 <!-- table:manual_check -->
 | Item | Value |
-|---|---:|
+|:---|---:|
 | Prices: TSM close on 2026-06-22 and on 2026-06-23 (USD); 2330.TW close on 2026-06-23 (TWD) | 467.67; 436.39; 2,490.0 |
 | FRED USD/TWD on 2026-06-22 and on 2026-06-23 | 31.63; 31.63 |
 | `prev_ny`: 467.67 / (5 x 2,490.0 / 31.63) - 1 | 18.81% (pipeline: 18.81%) |
@@ -194,7 +194,7 @@ autocorrelation of daily changes barely moves (-0.453 with Yahoo, -0.452 with FR
 
 <!-- table:fx_impact -->
 | Definition | Observations (Yahoo / FRED) | Mean premium (Yahoo / FRED) | Daily change std (Yahoo / FRED) | Daily change std, 2011-2016 (Yahoo / FRED) | Daily change autocorrelation (Yahoo / FRED) |
-|---|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|
 | `prev_ny` | 4,102 / 4,107 | 6.29% / 6.54% | 2.10% / 1.97% | 2.09% / 1.74% (-17%) | -0.453 / -0.452 |
 | `same_day` | 3,971 / 3,975 | 6.41% / 6.65% | 2.38% / 2.24% | 2.10% / 1.74% (-17%) | -0.441 / -0.436 |
 <!-- /table:fx_impact -->
@@ -214,7 +214,7 @@ against the Taipei close of day d.
 
 <!-- table:closing_times -->
 | Season | Taipei close (13:30 local), UTC | NY close (16:00 local), UTC | FRED rate (noon NY), UTC | `same_day` gap: NY close d - Taipei close d | `prev_ny` gap: Taipei close d - NY close d-1 | `prev_ny` gap on a Taipei Monday (Friday NY close) |
-|---|---:|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|---:|
 | Winter (example 2026-01-15) | 05:30 | 21:00 | 17:00 | 15.5 h | 8.5 h | 56.5 h |
 | Summer (example 2026-07-15) | 05:30 | 20:00 | 16:00 | 14.5 h | 9.5 h | 57.5 h |
 <!-- /table:closing_times -->
@@ -246,7 +246,7 @@ comes from the non-synchronous closes.
 
 <!-- table:asynchrony -->
 | Definition | Observations | Mean premium | Premium std | Daily change std | Daily change autocorrelation (lag 1) |
-|---|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|
 | `same_day` | 3,975 | 6.65% | 6.44% | 2.24% | -0.436 |
 | `prev_ny` | 4,107 | 6.54% | 6.30% | 1.97% | -0.452 |
 <!-- /table:asynchrony -->
@@ -258,7 +258,7 @@ on Mondays, against -0.043 to 0.079 on other days.
 
 <!-- table:weekdays -->
 | Taipei weekday | Daily changes | `prev_ny` daily change std | `same_day` daily change std | ARMA residual pairs | Lag-1 residual autocorrelation (daily ARMA, `prev_ny`) |
-|---|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|
 | Monday | 807 | 2.00% | 2.05% | 783 | 0.061 |
 | Tuesday | 836 | 2.09% | 2.08% | 810 | -0.043 |
 | Wednesday | 836 | 1.92% | 2.26% | 809 | 0.079 |
@@ -271,7 +271,7 @@ the data only; no market event is attributed to it.
 
 <!-- table:example -->
 | Taipei date d | TSM close on d (USD) | 2330.TW close on d (TWD) | FRED on d | `same_day` | TSM close on `adr_date` (USD) | `prev_ny` |
-|---|---:|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|---:|
 | 2025-04-07 | 146.17 | 848.0 | 33.02 | 13.83% | 146.80 | 14.12% |
 | 2025-04-08 | 141.37 | 816.0 | 33.01 | 14.38% | 146.17 | 18.30% |
 | 2025-04-09 | 158.75 | 785.0 | 32.85 | 32.86% | 141.37 | 18.89% |
@@ -310,7 +310,7 @@ calendar).
 
 <!-- table:stationarity -->
 | Definition | Frequency | Observations | ADF statistic | ADF p-value | ADF lags (AIC) | KPSS statistic | KPSS p-value |
-|---|---:|---:|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|---:|---:|
 | `prev_ny` | daily | 4,107 | -2.14 | 0.228 | 13 | 5.50 | 0.01 (bound) |
 | `prev_ny` | weekly | 865 | -2.26 | 0.184 | 3 | 2.59 | 0.01 (bound) |
 | `same_day` | daily | 3,975 | -2.13 | 0.234 | 17 | 5.32 | 0.01 (bound) |
@@ -334,7 +334,7 @@ ln(0.5) / ln(phi).
 
 <!-- table:ar1_naive -->
 | Period (`prev_ny`) | AR(1) daily [95% CI] | AR(1) weekly [95% CI] | Weekly / daily | Residual autocorrelation, daily | Residual autocorrelation, weekly |
-|---|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|
 | 2010-2019 | 2.2 [2.0, 2.5] | 7.8 [6.3, 10.0] | 3.5 | -0.24 | -0.22 |
 | 2020-2023 | 4.1 [3.3, 5.3] | 17.0 [11.3, 31.2] | 4.1 | -0.39 | -0.19 |
 | 2024-Apr 2026 | 4.0 [3.0, 5.6] | 12.2 [7.6, 25.4] | 3.1 | -0.37 | -0.27 |
@@ -352,7 +352,7 @@ autocorrelation of -0.44, the value observed on the premium.
 
 <!-- table:simulation -->
 | Estimator (half-life in days) | Mean | Std | Range over 30 replications | True value |
-|---|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|
 | AR(1), daily | 4.2 | 0.5 | 3.4 to 5.6 | 34.3 |
 | AR(1), weekly | 14.0 | 1.8 | 11.6 to 19.3 | 34.3 |
 | ARMA(1,1), daily | 35.0 | 4.8 | 27.1 to 46.4 | 34.3 |
@@ -382,7 +382,7 @@ and -0.34 weekly.
 
 <!-- table:arma -->
 | Period (`prev_ny`) | Weeks with data (calendar weeks) | Mean premium | ARMA daily [95% CI] | ARMA weekly [95% CI] | Theta daily | Theta weekly | Ljung-Box p, daily | Ljung-Box p, weekly |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|---:|---:|---:|
 | 2010-2019 | 514 (521) | 3.1% | 61.9 [44.9, 99.4] | 63.1 [40.4, 137.9] | -0.76 | -0.59 | 8.0e-09 | 0.280 |
 | 2020-2023 | 206 (209) | 7.3% | 54.6 [30.1, 279.5] | 63.9 [33.1, 551.5] | -0.67 | -0.49 | 3.8e-05 | 0.003 |
 | 2024-Apr 2026 | 119 (121) | 19.2% | 53.4 [26.9, 2,103.1] | 69.1 [29.6, inf] | -0.63 | -0.44 | 0.280 | 0.720 |
@@ -412,7 +412,7 @@ figure.
 
 <!-- table:rolling -->
 | Estimate (`prev_ny`, half-life in trading days) | Windows | Excluded | Median | Interquartile range | Share > 20 days | Share with lower 95% bound > 20 days | Median abs level shift in window (points) | Rank correlation: abs level shift vs half-life |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|---:|---:|---:|
 | ARMA(1,1) weekly, 3-year windows | 167 | 7 | 69.6 | 34.6 to 122.3 | 92% | 68% | 2.7 | 0.86 |
 | ARMA(1,1) daily, 2-year windows | 178 | 13 | 37.8 | 25.4 to 55.1 | 81% | 41% | 1.9 | 0.74 |
 | AR(1) weekly, 3-year windows | 167 | 0 | 9.0 | 4.8 to 20.0 | 25% | 13% | 2.7 | 0.81 |
@@ -454,7 +454,7 @@ replications per half-life (`scripts/simulate_level_shift.py`).
 
 <!-- table:level_shift_sim -->
 | Series (weekly ARMA, 3-year windows) | Rank correlation: abs level shift vs half-life, median [5%, 95%] | Median half-life, all windows [5%, 95%] | Median half-life, windows with shift < 2 points [5%, 95%] | Windows with shift < 2 points | Share of replications reaching the real correlation | Share of replications reaching the real stable median |
-|---|---:|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|---:|
 | Simulated, true half-life 32 days, no regime (50 replications) | 0.35 [0.10, 0.67] | 26.6 [19.4, 36.9] | 24.4 [16.9, 31.6] | 104 | 0% | 2% |
 | Simulated, true half-life 70 days, no regime (50 replications) | 0.48 [0.16, 0.72] | 48.9 [30.5, 73.6] | 38.6 [24.3, 56.7] | 64 | 0% | 74% |
 | Real `prev_ny` | 0.86 | 69.6 | 32.3 | 70 |  |  |
@@ -522,7 +522,7 @@ co-movement within the week; they are not forecasts.
 
 <!-- table:factor_models -->
 | Model (weekly d q, `prev_ny`, full sample) | S&P 500 | Nasdaq-100 | d ln FX | d ln traded-value ratio | R2 | Weeks |
-|---|---:|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|---:|
 | univariate r_sp500 | 0.203 (p 6.0e-10) |  |  |  | 4.3% | 852 |
 | univariate r_ndx |  | 0.196 (p 4.4e-13) |  |  | 5.7% | 852 |
 | univariate dln_fx |  |  | 0.096 (p 0.455) |  | 0.1% | 852 |
@@ -545,7 +545,7 @@ short ADR pair with equal dollar legs therefore has an S&P 500 beta of -0.20
 
 <!-- table:factor_main -->
 | Sample | Weeks | S&P 500 coefficient [95% CI] | d ln FX coefficient [95% CI] | R2 |
-|---|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|
 | full | 852 | 0.24 [0.17, 0.31] | 0.36 [0.12, 0.60] | 5.4% |
 | 2010-2019 | 506 | 0.21 [0.12, 0.30] | 0.43 [0.14, 0.73] | 4.7% |
 | 2020-2023 | 203 | 0.23 [0.11, 0.34] | 0.16 [-0.21, 0.52] | 7.3% |
@@ -555,7 +555,7 @@ short ADR pair with equal dollar legs therefore has an S&P 500 beta of -0.20
 
 <!-- table:factor_betas -->
 | Sample | Weeks | ADR beta [95% CI] | Local share beta, USD [95% CI] | Difference = beta of d q [95% CI] |
-|---|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|
 | full | 852 | 1.06 [0.93, 1.18] | 0.85 [0.71, 0.99] | 0.20 [0.14, 0.27] |
 | 2010-2019 | 506 | 0.98 [0.87, 1.09] | 0.82 [0.70, 0.94] | 0.16 [0.08, 0.24] |
 | 2020-2023 | 203 | 0.95 [0.75, 1.16] | 0.74 [0.51, 0.98] | 0.21 [0.10, 0.32] |
@@ -578,7 +578,7 @@ monthly data, and the rolling interval excludes 0 in only 17% of windows (it exc
 
 <!-- table:factor_fx_tests -->
 | Model (full sample) | d ln FX coefficient | p-value, coefficient = 1 | p-value, coefficient = 0 |
-|---|---:|---:|---:|
+|:---|---:|---:|---:|
 | univariate dln_fx | 0.10 | 2.4e-12 | 0.455 |
 | multivariate | 0.36 | 2.4e-07 | 0.003 |
 | robustness: Nasdaq-100 instead of S&P 500 | 0.40 | 5.6e-07 | 7.9e-04 |
@@ -589,7 +589,7 @@ monthly data, and the rolling interval excludes 0 in only 17% of windows (it exc
 
 <!-- table:factor_rolling -->
 | Coefficient, 3-year windows, monthly step | Windows | Median | Range | Share positive | Share with 95% CI excluding 0 | Share with 95% CI excluding 1 |
-|---|---:|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|---:|
 | r_sp500 (joint model) | 167 | 0.20 | 0.07 to 0.40 | 100% | 66% |  |
 | dln_fx (joint model) | 167 | 0.33 | 0.01 to 0.74 | 100% | 17% | 80% |
 | pair trade beta | 167 | -0.18 | -0.33 to -0.00 | 0% | 63% |  |
@@ -607,7 +607,7 @@ monthly data, and the rolling interval excludes 0 in only 17% of windows (it exc
 
 <!-- table:factor_predictive -->
 | Predictive model (factors lagged one week, full sample) | Coefficients | R2 |
-|---|---|---:|
+|:---|:---|---:|
 | univariate r_sp500 | -0.017 (p 0.611) | 0.0% |
 | univariate r_ndx | -0.009 (p 0.763) | 0.0% |
 | univariate dln_fx | -0.245 (p 0.043) | 0.6% |
@@ -624,7 +624,7 @@ Taipei session.
 
 <!-- table:factor_same_day -->
 | Definition | Weeks | S&P 500 [95% CI] | d ln FX [95% CI] | R2 |
-|---|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|
 | `same_day`, full sample | 850 | 0.32 [0.25, 0.39] | 0.69 [0.46, 0.91] | 10.7% |
 <!-- /table:factor_same_day -->
 
@@ -680,12 +680,12 @@ asynchrony that no order can capture.
 
 <!-- table:robustness_asynchrony -->
 | Decision | Trades | Mean gap (points) | Median gap (points) | t |
-|---|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|
 | entry | 32 | -1.47 | -1.34 | -4.7 |
 | exit | 30 | 0.91 | 0.79 | 2.1 |
 
 | Delay at | Trades | n | Pearson | p | Spearman | p |
-|---|---|---:|---:|---:|---:|---:|
+|:---|:---|---:|---:|---:|---:|---:|
 | entry | all trades | 32 | 0.03 | 0.888 | 0.09 | 0.641 |
 | entry | without July 2020 | 31 | 0.03 | 0.892 | 0.08 | 0.666 |
 | exit | all trades | 30 | 0.56 | 0.001 | 0.25 | 0.177 |
@@ -701,7 +701,7 @@ volatility and Sharpe ratios are computed on weekly P&L.
 
 <!-- table:fx_date_correction -->
 | Trades | Change in total gross P&L | Change per trade | t |
-|---|---:|---:|---:|
+|:---|---:|---:|---:|
 | 33 | +0.0452 | +13.7 bp | 1.8 |
 <!-- /table:fx_date_correction -->
 
@@ -714,7 +714,7 @@ R.O.C. Transfers of ADSs are not subject to R.O.C. securities transaction tax."
 
 <!-- table:costs -->
 | Cost | Default | Institutional scenario | Source |
-|---|---:|---:|---|
+|:---|---:|---:|:---|
 | ADR commission, per transaction | 5 bp | 2 bp | assumption, not verified |
 | Local commission, per transaction | 10 bp | 3 bp | assumption; regulatory ceiling 0.1425% (Taipei Times, 2000), discounts common |
 | Taiwan securities transaction tax, on sales of the local share | 30 bp | 30 bp | 0.3% of the sale proceeds, stated in TSMC's 20-F (2026) and secondary sources |
@@ -733,7 +733,7 @@ modelled apart from the borrow fee.
 
 <!-- table:backtest_headline -->
 | P&L | Total | Annual return | Annual vol, daily marks | Annual vol, weekly | Sharpe, daily | Sharpe, weekly [95% bootstrap CI] | Max drawdown | Winning trades |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Gross | 0.360 | 2.21% | 19.3% | 10.5% | 0.11 | 0.21 [-0.04, 0.47] | -0.23 | 79% |
 | Net | 0.088 | 0.54% | 19.3% | 10.5% | 0.03 | 0.05 [-0.19, 0.29] | -0.25 | 61% |
 
@@ -744,7 +744,7 @@ modelled apart from the borrow fee.
 
 <!-- table:backtest_costs -->
 | Component (total, USD per 1 USD per leg) | Value |
-|---|---:|
+|:---|---:|
 | Gross P&L (price, FX, dividends) | +0.360 |
 | Taiwan transaction tax | -0.105 |
 | Local commission | -0.068 |
@@ -759,7 +759,7 @@ modelled apart from the borrow fee.
 
 <!-- table:backtest_subperiods -->
 | Sub-period | Trades (by entry) | Gross P&L | Net P&L | Net Sharpe, weekly | Exposure |
-|---|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|
 | 2010-2019 | 20 | 0.137 | -0.018 | -0.03 | 22% |
 | 2020-2023 | 7 | 0.175 | 0.113 | 0.23 | 31% |
 | 2024-Apr 2026 | 5 | 0.012 | -0.035 | -0.08 | 43% |
@@ -774,7 +774,7 @@ it is -0.01. The best grid point (entry 2.0, window 13 weeks) is not retained.
 
 <!-- table:backtest_grid -->
 | Quantity | Window 13 weeks | Window 26 weeks | Window 52 weeks |
-|---|---:|---:|---:|
+|:---|---:|---:|---:|
 | Net Sharpe, weekly, entry z > 1 | 0.07 | 0.04 | 0.00 |
 | Net Sharpe, weekly, entry z > 1.5 | 0.06 | 0.05 | -0.08 |
 | Net Sharpe, weekly, entry z > 2 | 0.15 | 0.13 | 0.06 |
@@ -788,7 +788,7 @@ it is -0.01. The best grid point (entry 2.0, window 13 weeks) is not retained.
 
 <!-- table:backtest_borrow -->
 | ADR borrow fee | Net P&L | Net annual return | Net Sharpe, weekly | Total borrow cost |
-|---|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|
 | 0.25% | 0.099 | 0.61% | 0.06 | -0.010 |
 | 0.50% | 0.088 | 0.54% | 0.05 | -0.021 |
 | 1.00% | 0.068 | 0.42% | 0.04 | -0.042 |
@@ -812,7 +812,7 @@ test is somewhat favourable.
 
 <!-- table:robustness_mc -->
 | P&L | Actual | Random entries, median | Random entries, 5% to 95% | One-sided p-value |
-|---|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|
 | Gross | 0.360 | -0.037 | -0.329 to 0.240 | 0.012 |
 | Net | 0.088 | -0.318 | -0.612 to -0.041 | 0.011 |
 <!-- /table:robustness_mc -->
@@ -826,7 +826,7 @@ trade (t = 1.2) instead of 0.70% (t = 1.6).
 
 <!-- table:robustness_execution -->
 | Trades | Execution | Total gross P&L | Mean per trade | Mean loss vs normal | t of the loss |
-|---|---|---:|---:|---:|---:|
+|:---|:---|---:|---:|---:|---:|
 | all trades | normal | 0.360 | 1.09% | 0.00% |  |
 | all trades | entry delayed | 0.311 | 0.94% | 0.15% | 0.4 |
 | all trades | exit delayed | 0.128 | 0.39% | 0.70% | 1.6 |
@@ -845,7 +845,7 @@ of the institutional ones.
 
 <!-- table:robustness_costs -->
 | Cost scenario | All-in cost per round trip | Net P&L | Net Sharpe, weekly | Tax share of costs |
-|---|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|
 | Default | 82 bp | 0.088 | 0.05 | 39% |
 | Institutional | 52 bp | 0.187 | 0.11 | 61% |
 | Tax only | 32 bp | 0.255 | 0.15 | 100% |
@@ -865,7 +865,7 @@ return.
 
 <!-- table:robustness_hedge -->
 | Version | P&L | Total | Annual vol, weekly | Sharpe, weekly | Max drawdown | Realised beta to the S&P 500 |
-|---|---|---:|---:|---:|---:|---:|
+|:---|:---|---:|---:|---:|---:|---:|
 | unhedged | gross | 0.360 | 10.5% | 0.21 | -0.23 | -0.055 |
 | hedged | gross | 0.446 | 10.3% | 0.26 | -0.20 | -0.012 |
 | unhedged | net | 0.088 | 10.5% | 0.05 | -0.25 | -0.058 |
@@ -882,7 +882,7 @@ about its resilience.
 
 <!-- table:robustness_stress -->
 | Period | Version | Days in position | Net P&L | Worst week, net |
-|---|---|---:|---:|---:|
+|:---|:---|---:|---:|---:|
 | March 2020 | unhedged | 14% | 0.0031 | -0.0005 |
 | March 2020 | hedged | 14% | 0.0059 | -0.0005 |
 | August 2024 | unhedged | 0% | 0.0000 | 0.0000 |
@@ -929,7 +929,7 @@ verified, so the sample starts on 2011-03-01.
 
 <!-- table:step6_securities -->
 | Security | ADR / local | Shares per ADS | Sample start | Sample end | Ratio checked in |
-|---|---|---:|---|---|---|
+|:---|:---|---:|:---|:---|:---|
 | TSMC | TSM / 2330.TW | 5 | 2010-01-01 | 2026-10-30 | 20-F filed 2010-04-15, 2018-04-19, 2026-04-16 |
 | UMC | UMC / 2303.TW | 5 | 2010-01-01 | 2026-10-30 | 20-F filed 2010-04-30, 2018-04-26, 2026-04-30 |
 | ASE | ASX / 3711.TW | 2 | 2018-04-30 | 2026-10-30 | 20-F filed 2019-04-26, 2026-04-01 (ASE Inc., 5 shares, before 2018-04-30) |
@@ -949,7 +949,7 @@ without a jump; it was kept. The full list of checks is in
 
 <!-- table:step6_hypotheses -->
 |  | Criterion | TSMC (in sample) | UMC | ASE | Chunghwa | Aggregation |
-|---|---|---|---|---|---|---|
+|:---|:---|:---|:---|:---|:---|:---|
 | H1 | < -0.2 | -0.452 | -0.454 yes | -0.460 yes | -0.469 yes | 3/3, generalised |
 | H2 | ARMA > 2 x AR(1) | ARMA 69.6 d vs AR(1) 9.0 d (160 windows) | ARMA 32.9 d vs AR(1) 3.4 d (159 windows) yes | ARMA 120.6 d vs AR(1) 9.1 d (59 windows) yes | ARMA 4.4 d vs AR(1) 2.2 d (146 windows) no | 2/3, generalised |
 | H3 | difference > 0, 95% CI above 0 | 0.203 [0.139, 0.268] (ADR 1.06, local 0.85) | 0.107 [0.015, 0.199] (ADR 0.97, local 0.86) yes | 0.202 [0.099, 0.305] (ADR 1.34, local 1.13) yes | 0.038 [0.006, 0.070] (ADR 0.23, local 0.19) yes | 3/3, generalised |
@@ -959,7 +959,7 @@ without a jump; it was kept. The full list of checks is in
 
 <!-- table:step6_mean_reversion -->
 | Quantity (half-lives in trading days) | TSMC | UMC | ASE | Chunghwa |
-|---|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|
 | Rolling weekly ARMA(1,1), median half-life | 69.6 | 32.9 | 120.6 | 4.4 |
 | Rolling weekly AR(1), median half-life | 9.0 | 3.4 | 9.1 | 2.2 |
 | Rolling daily ARMA(1,1), median half-life | 37.8 | 13.7 | 47.7 | 4.2 |
@@ -974,7 +974,7 @@ without a jump; it was kept. The full list of checks is in
 
 <!-- table:step6_factors -->
 | Security | ADR beta | Local beta (USD) | Difference [95% CI] | Main model: S&P 500 [95% CI] | Main model: d ln FX [95% CI] | Weeks |
-|---|---:|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|---:|
 | TSMC | 1.06 | 0.85 | 0.203 [0.139, 0.268] | 0.24 [0.17, 0.31] | 0.36 [0.12, 0.60] | 852 |
 | UMC | 0.97 | 0.86 | 0.107 [0.015, 0.199] | 0.16 [0.06, 0.25] | 0.51 [0.24, 0.79] | 852 |
 | ASE | 1.34 | 1.13 | 0.202 [0.099, 0.305] | 0.23 [0.12, 0.33] | 0.28 [-0.09, 0.64] | 430 |
@@ -983,7 +983,7 @@ without a jump; it was kept. The full list of checks is in
 
 <!-- table:step6_strategy -->
 | Strategy, a priori rules | TSMC | UMC | ASE | Chunghwa |
-|---|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|
 | Trades | 33 | 41 | 21 | 46 |
 | Gross P&L | 0.360 | -0.008 | -0.059 | 0.316 |
 | Net P&L | 0.088 | -0.340 | -0.240 | -0.049 |
@@ -1020,7 +1020,7 @@ without a jump; it was kept. The full list of checks is in
 
 <!-- table:step6_h5 -->
 | Security | Trades, `prev_ny` | Net P&L, `prev_ny` | Trades, `same_day` | Net P&L, `same_day` | Difference [95% block-bootstrap CI] |
-|---|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|
 | UMC | 41 | -0.340 | 38 | 0.062 | 0.401 [-0.193, 0.997] |
 | ASE | 21 | -0.240 | 25 | 0.126 | 0.366 [-0.190, 0.932] |
 | Chunghwa | 46 | -0.049 | 37 | -0.137 | -0.087 [-0.293, 0.113] |
@@ -1030,7 +1030,7 @@ The beta hedge behaves as for TSMC: volatility is almost unchanged.
 
 <!-- table:step6_hedge -->
 | Security | Mean pair beta at entry | Trades without hedge | Net vol, weekly (unhedged / hedged) | Net Sharpe (unhedged / hedged) | Net max drawdown (unhedged / hedged) |
-|---|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|
 | TSMC | -0.16 | 0 | 10.5% / 10.3% | 0.05 / 0.10 | -0.25 / -0.22 |
 | UMC | -0.12 | 0 | 8.4% / 8.2% | -0.25 / -0.20 | -0.43 / -0.35 |
 | ASE | -0.18 | 2 | 9.8% / 9.7% | -0.30 / -0.26 | -0.30 / -0.28 |
@@ -1143,7 +1143,7 @@ weeks. Code: `scripts/arbitrage_band.py`, tested on hand-computed cases.
 
 <!-- table:arbitrage_band -->
 | Security | h (trading days) | D*, default, T = h | D*, default, T = 2h | D*, institutional, T = h | D*, institutional, T = 2h | Weeks with deviation > D* (default, T = h) | Weeks with abs deviation > D* | Deviation std (points) |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|---:|---:|---:|
 | TSMC | 69.6 | 1.68 | 1.30 | 1.02 | 0.77 | 23% | 45% | 2.55 |
 | UMC | 32.9 | 1.53 | 1.11 | 0.95 | 0.67 | 19% | 44% | 2.88 |
 | ASE | 120.6 | 1.88 | 1.57 | 1.12 | 0.91 | 22% | 42% | 2.67 |
@@ -1174,7 +1174,7 @@ largest discounts are much smaller than the largest premiums.
 
 <!-- table:premium_sign -->
 | Security | Weeks | Weeks at a discount | Weeks below -2% | Min | 5% | Median | 95% | Max |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|---:|---:|---:|
 | TSMC | 865 | 5% | 0% | -3.1% | 0.0% | 4.3% | 21.0% | 29.5% |
 | UMC | 865 | 52% | 19% | -9.2% | -3.8% | -0.1% | 21.1% | 50.1% |
 | ASE | 437 | 38% | 15% | -8.1% | -3.5% | 1.0% | 10.1% | 19.7% |
@@ -1215,7 +1215,7 @@ accentuated it, but these data cannot isolate its effect.
 
 <!-- table:chow -->
 | Test | Break date | F | p-value | Weeks before | Weeks after |
-|---|---|---:|---:|---:|---:|
+|:---|:---|---:|---:|---:|---:|
 | Candidate date, full history | 2026-04-01 | 15.37 | 2.8e-07 | 822 | 30 |
 | Candidate date, full history | 2026-04-15 | 13.99 | 1.1e-06 | 824 | 28 |
 | Candidate date, full history | 2026-04-24 | 13.38 | 1.9e-06 | 825 | 27 |
@@ -1238,7 +1238,7 @@ accentuated it, but these data cannot isolate its effect.
 
 <!-- table:monthly -->
 | Month | Mean `prev_ny` premium | Min | Max | Trading days |
-|---|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|
 | 2025-09 | 24.81% | 21.1% | 29.5% | 21 |
 | 2025-10 | 25.15% | 21.3% | 30.0% | 20 |
 | 2025-11 | 23.93% | 20.3% | 26.4% | 20 |
@@ -1368,14 +1368,14 @@ between Yahoo and FRED by year, and the persistent shifts.
 
 <!-- table:fx_gross_errors -->
 | Date | Yahoo TWD=X | FRED DEXTAUS | `same_day` premium (raw Yahoo) | `prev_ny` premium (raw Yahoo) |
-|---|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|
 | 2011-10-25 | 1.8015 | 30.11 | -93.9% | -93.7% |
 | 2014-12-31 | 3.6700 | 31.60 | -88.3% | -88.3% |
 <!-- /table:fx_gross_errors -->
 
 <!-- table:fx_verdicts -->
 | Verdict for the dates flagged in Yahoo | Dates |
-|---|---:|
+|:---|---:|
 | Yahoo point off (gap > 1%, FRED flat) | 86 |
 | Yahoo point close to FRED, its neighbours off | 28 |
 | No FRED value on that date | 9 |
@@ -1384,7 +1384,7 @@ between Yahoo and FRED by year, and the persistent shifts.
 
 <!-- table:fx_gap_by_year -->
 | Year | Common dates | Mean abs gap | Share abs gap > 1% | Dates flagged in Yahoo |
-|---|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|
 | 2010 | 250 | 0.17% | 1% | 0 |
 | 2011 | 249 | 0.50% | 12% | 15 |
 | 2012 | 251 | 0.23% | 3% | 8 |
@@ -1406,7 +1406,7 @@ between Yahoo and FRED by year, and the persistent shifts.
 
 <!-- table:fx_shifts -->
 | Start | End | Consecutive dates | Mean gap Yahoo/FRED |
-|---|---|---:|---:|
+|:---|:---|---:|---:|
 | 2013-03-19 | 2013-04-01 | 10 | -2.51% |
 | 2013-04-15 | 2013-05-03 | 15 | -2.40% |
 | 2013-05-09 | 2013-05-22 | 10 | -2.55% |
@@ -1424,7 +1424,7 @@ Daily changes of more than 10 points (FRED rate):
 
 <!-- table:jumps -->
 | Date | `same_day` | `prev_ny` | `same_day` next day | `prev_ny` next day |
-|---|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|
 | 2020-03-16 | -1.95% | 13.83% | 9.43% | 1.16% |
 | 2020-03-17 | 9.43% | 1.16% | 3.66% | 12.80% |
 | 2020-03-18 | 3.66% | 12.80% | 7.60% | 8.67% |
@@ -1445,7 +1445,7 @@ Data checks of the out-of-sample securities:
 
 <!-- table:step6_data_checks -->
 | Security | Check | Date | Value | Action |
-|---|---|---|---|---|
+|:---|:---|:---|:---|:---|
 | UMC | adr closes | 2010-01-04 | 4233 | first date and count |
 | UMC | local closes | 2010-01-04 | 4112 | first date and count |
 | UMC | FX report |  | FX points removed: 0; FX points flagged for manual review: 0 | as for TSMC |
@@ -1467,7 +1467,7 @@ The 33 trades of the TSMC strategy (rules fixed a priori, default costs):
 
 <!-- table:backtest_trades -->
 | Entry decision | Exit decision | Exit reason | Weeks | z at entry | z at exit | Gross P&L | Net P&L |
-|---|---|---|---:|---:|---:|---:|---:|
+|:---|:---|:---|---:|---:|---:|---:|---:|
 | 2011-02-18 | 2011-02-25 | z_below_exit | 1 | 1.61 | -0.62 | +0.0087 | +0.0018 |
 | 2011-10-07 | 2011-10-21 | z_below_exit | 2 | 1.63 | -0.15 | +0.0009 | -0.0064 |
 | 2011-10-28 | 2012-03-23 | z_below_exit | 20 | 2.22 | -0.57 | -0.0292 | -0.0390 |
@@ -1507,7 +1507,7 @@ Variants of the TSMC strategy:
 
 <!-- table:backtest_variants -->
 | Variant | Gross P&L | Net P&L | Net Sharpe, weekly | Net max drawdown |
-|---|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|
 | Rules fixed a priori, default costs | 0.360 | 0.088 | 0.05 | -0.25 |
 | Short pays the ADR dividend net of withholding | 0.360 | 0.105 | 0.06 | -0.25 |
 | Execution one trading day later on each leg | 0.080 | -0.191 | -0.12 | -0.44 |
@@ -1517,7 +1517,7 @@ Every number quoted in the text of Sections 4 to 6, with its source:
 
 <!-- table:key_figures -->
 | Quantity quoted in the text | Value | Source |
-|---|---|---|
+|:---|:---|:---|
 | Last FRED value | 2026-10-23 | fx_fred.csv |
 | FRED values forward-filled since 2010 | 180 | fx_fred.csv |
 | Forward-filled values used by prev_ny / same_day | 43 / 36 | premium CSVs |
@@ -1661,6 +1661,7 @@ Requires Python 3.12. From the repository root, in this order:
     python scripts/arbitrage_band.py
     python scripts/make_report_tables.py         # writes docs/tables/ and fills the reports
     python scripts/check_report_numbers.py
+    sh scripts/make_pdfs.sh                      # PDFs, needs pandoc and typst
 
 Yahoo data can be revised after download, so a fresh download may differ slightly from
 the cached data used here.
@@ -1669,7 +1670,7 @@ the cached data used here.
 
 <!-- table:versions -->
 | Component | Version |
-|---|---|
+|:---|:---|
 | Python | 3.12.15 |
 | pandas | 3.1.0 |
 | numpy | 2.5.4 |
@@ -1687,7 +1688,7 @@ price is not timestamped and differs from the official close in our data.
 
 <!-- table:manual_check_detail -->
 | Item | Value | Source |
-|---|---:|---|
+|:---|---:|:---|
 | Taipei date d | 2026-06-23 | `premium_table.csv` |
 | NY date used by `prev_ny` (`adr_date`) | 2026-06-22 | previous NY session |
 | TSM close on `adr_date` (USD) | 467.67 | `raw_closes.csv` |

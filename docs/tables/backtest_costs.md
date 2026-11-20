@@ -1,5 +1,5 @@
 | Component (total, USD per 1 USD per leg) | Value |
-|---|---:|
+|:---|---:|
 | Gross P&L (price, FX, dividends) | +0.360 |
 | Taiwan transaction tax | -0.105 |
 | Local commission | -0.068 |

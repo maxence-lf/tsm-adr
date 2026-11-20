@@ -1,5 +1,5 @@
 | Quantity (half-lives in trading days) | TSMC | UMC | ASE | Chunghwa |
-|---|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|
 | Rolling weekly ARMA(1,1), median half-life | 69.6 | 32.9 | 120.6 | 4.4 |
 | Rolling weekly AR(1), median half-life | 9.0 | 3.4 | 9.1 | 2.2 |
 | Rolling daily ARMA(1,1), median half-life | 37.8 | 13.7 | 47.7 | 4.2 |

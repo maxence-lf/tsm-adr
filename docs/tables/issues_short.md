@@ -1,5 +1,5 @@
 | Issue | Impact (before -> after) |
-|---|---|
+|:---|:---|
 | a) Errors in the Yahoo exchange rate | `prev_ny` daily change std over 2011-2016: 2.09% -> 1.74%; minimum premium -93.7% -> -6.0% |
 | b) Measurement noise from non-synchronous closes | Autocorrelation `prev_ny`: -0.453 (Yahoo) -> -0.452 (FRED): the noise is not from the exchange rate |
 | c) AR(1) half-life biased downwards | Weekly half-life by sub-period: 7.8-17.0 (AR(1)) -> 63.1-69.1 days (ARMA) |

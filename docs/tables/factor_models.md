@@ -1,5 +1,5 @@
 | Model (weekly d q, `prev_ny`, full sample) | S&P 500 | Nasdaq-100 | d ln FX | d ln traded-value ratio | R2 | Weeks |
-|---|---:|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|---:|
 | univariate r_sp500 | 0.203 (p 6.0e-10) |  |  |  | 4.3% | 852 |
 | univariate r_ndx |  | 0.196 (p 4.4e-13) |  |  | 5.7% | 852 |
 | univariate dln_fx |  |  | 0.096 (p 0.455) |  | 0.1% | 852 |

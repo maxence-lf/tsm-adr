@@ -1,5 +1,5 @@
 | Issue | How it was detected | Fix | Impact (before -> after) |
-|---|---|---|---|
+|:---|:---|:---|:---|
 | a) Errors in the Yahoo exchange rate | 2 impossible values (outside [25, 40]) gave premiums down to -93.7%; a local rule then flagged 124 dates; comparison with FRED found 406 dates with a gap above 1%, of which 87 flagged, and 9 persistent shifts | FRED DEXTAUS, taken on the NY date of the ADR used | `prev_ny` daily change std over 2011-2016: 2.09% -> 1.74%; minimum premium -93.7% -> -6.0% |
 | b) Measurement noise from non-synchronous closes | Daily changes have a lag-1 autocorrelation of -0.45; it is unchanged when Yahoo is replaced by FRED | `prev_ny` as reference; weekly sampling and a signal-plus-noise model downstream | Autocorrelation `prev_ny`: -0.453 (Yahoo) -> -0.452 (FRED): the noise is not from the exchange rate |
 | c) AR(1) half-life biased downwards | Weekly AR(1) half-lives 7.8-17.0 days against 2.2-4.1 daily; a calibrated simulation (true 34.3 days) gives 4.2 daily and 14.0 weekly | ARMA(1,1): AR(1) signal plus white measurement noise | Weekly half-life by sub-period: 7.8-17.0 (AR(1)) -> 63.1-69.1 days (ARMA) |

@@ -1,5 +1,5 @@
 | Component | Version |
-|---|---|
+|:---|:---|
 | Python | 3.12.15 |
 | pandas | 3.1.0 |
 | numpy | 2.5.4 |

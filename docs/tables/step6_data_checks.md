@@ -1,5 +1,5 @@
 | Security | Check | Date | Value | Action |
-|---|---|---|---|---|
+|:---|:---|:---|:---|:---|
 | UMC | adr closes | 2010-01-04 | 4233 | first date and count |
 | UMC | local closes | 2010-01-04 | 4112 | first date and count |
 | UMC | FX report |  | FX points removed: 0; FX points flagged for manual review: 0 | as for TSMC |

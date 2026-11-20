@@ -1,5 +1,5 @@
 | Predictive model (factors lagged one week, full sample) | Coefficients | R2 |
-|---|---|---:|
+|:---|:---|---:|
 | univariate r_sp500 | -0.017 (p 0.611) | 0.0% |
 | univariate r_ndx | -0.009 (p 0.763) | 0.0% |
 | univariate dln_fx | -0.245 (p 0.043) | 0.6% |

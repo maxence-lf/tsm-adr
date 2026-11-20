@@ -44,6 +44,7 @@ from 2010 to 2026 and asks why arbitrage does not close it, and who pays for it.
   problem, detection, correction and impact; what did not work; what is not verified;
   all tables.
 - [Pre-registration of the out-of-sample test](docs/preregistration_step6.md).
+- PDF versions: [short report](docs/report.pdf), [technical report](docs/technical_report.pdf).
 
 ## Reproduce
 
@@ -68,6 +69,7 @@ Requires Python 3.12. Raw data is not redistributed: the scripts download and ca
     python scripts/arbitrage_band.py
     python scripts/make_report_tables.py
     python scripts/check_report_numbers.py
+    sh scripts/make_pdfs.sh
 
 ## Repository structure
 
@@ -81,5 +83,5 @@ Requires Python 3.12. Raw data is not redistributed: the scripts download and ca
 
 ## Tools
 
-Python, pandas, NumPy, statsmodels, SciPy, matplotlib, yfinance, pytest. Development
-assisted by Claude Code.
+Python, pandas, NumPy, statsmodels, SciPy, matplotlib, yfinance, pytest; pandoc and Typst
+for the PDFs. Development assisted by Claude Code.

@@ -1,5 +1,5 @@
 | Item | Value | Source |
-|---|---:|---|
+|:---|---:|:---|
 | Taipei date d | 2026-06-23 | `premium_table.csv` |
 | NY date used by `prev_ny` (`adr_date`) | 2026-06-22 | previous NY session |
 | TSM close on `adr_date` (USD) | 467.67 | `raw_closes.csv` |

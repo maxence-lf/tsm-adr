@@ -94,7 +94,7 @@ def md(df: pd.DataFrame, align: list[str] | None = None) -> str:
     cols = list(df.columns)
     align = align or ["l"] + ["r"] * (len(cols) - 1)
     lines = ["| " + " | ".join(cols) + " |",
-             "|" + "|".join("---:" if a == "r" else "---" for a in align) + "|"]
+             "|" + "|".join("---:" if a == "r" else ":---" for a in align) + "|"]
     lines += ["| " + " | ".join(str(v) for v in row) + " |" for row in df.itertuples(index=False)]
     return "\n".join(lines) + "\n"
 

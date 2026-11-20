@@ -1,5 +1,5 @@
 | Trades | Execution | Total gross P&L | Mean per trade | Mean loss vs normal | t of the loss |
-|---|---|---:|---:|---:|---:|
+|:---|:---|---:|---:|---:|---:|
 | all trades | normal | 0.360 | 1.09% | 0.00% |  |
 | all trades | entry delayed | 0.311 | 0.94% | 0.15% | 0.4 |
 | all trades | exit delayed | 0.128 | 0.39% | 0.70% | 1.6 |

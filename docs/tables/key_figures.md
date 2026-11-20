@@ -1,5 +1,5 @@
 | Quantity quoted in the text | Value | Source |
-|---|---|---|
+|:---|:---|:---|
 | Last FRED value | 2026-10-23 | fx_fred.csv |
 | FRED values forward-filled since 2010 | 180 | fx_fred.csv |
 | Forward-filled values used by prev_ny / same_day | 43 / 36 | premium CSVs |

@@ -1,5 +1,5 @@
 | Estimate (`prev_ny`, half-life in trading days) | Windows | Excluded | Median | Interquartile range | Share > 20 days | Share with lower 95% bound > 20 days | Median abs level shift in window (points) | Rank correlation: abs level shift vs half-life |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|---:|---:|---:|
 | ARMA(1,1) weekly, 3-year windows | 167 | 7 | 69.6 | 34.6 to 122.3 | 92% | 68% | 2.7 | 0.86 |
 | ARMA(1,1) daily, 2-year windows | 178 | 13 | 37.8 | 25.4 to 55.1 | 81% | 41% | 1.9 | 0.74 |
 | AR(1) weekly, 3-year windows | 167 | 0 | 9.0 | 4.8 to 20.0 | 25% | 13% | 2.7 | 0.81 |

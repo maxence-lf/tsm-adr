@@ -1,5 +1,5 @@
 | Test | Break date | F | p-value | Weeks before | Weeks after |
-|---|---|---:|---:|---:|---:|
+|:---|:---|---:|---:|---:|---:|
 | Candidate date, full history | 2026-04-01 | 15.37 | 2.8e-07 | 822 | 30 |
 | Candidate date, full history | 2026-04-15 | 13.99 | 1.1e-06 | 824 | 28 |
 | Candidate date, full history | 2026-04-24 | 13.38 | 1.9e-06 | 825 | 27 |

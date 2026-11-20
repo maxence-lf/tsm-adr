@@ -37,7 +37,7 @@ conclusion had it not been detected:
 
 <!-- table:issues_short -->
 | Issue | Impact (before -> after) |
-|---|---|
+|:---|:---|
 | a) Errors in the Yahoo exchange rate | `prev_ny` daily change std over 2011-2016: 2.09% -> 1.74%; minimum premium -93.7% -> -6.0% |
 | b) Measurement noise from non-synchronous closes | Autocorrelation `prev_ny`: -0.453 (Yahoo) -> -0.452 (FRED): the noise is not from the exchange rate |
 | c) AR(1) half-life biased downwards | Weekly half-life by sub-period: 7.8-17.0 (AR(1)) -> 63.1-69.1 days (ARMA) |
@@ -75,7 +75,7 @@ measurement noise from the non-synchronous closes, not from the exchange rate
 
 <!-- table:asynchrony -->
 | Definition | Observations | Mean premium | Premium std | Daily change std | Daily change autocorrelation (lag 1) |
-|---|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|
 | `same_day` | 3,975 | 6.65% | 6.44% | 2.24% | -0.436 |
 | `prev_ny` | 4,107 | 6.54% | 6.30% | 1.97% | -0.452 |
 <!-- /table:asynchrony -->
@@ -97,7 +97,7 @@ sub-period, with a negative moving-average coefficient, the trace of the noise
 
 <!-- table:arma -->
 | Period (`prev_ny`) | Weeks with data (calendar weeks) | Mean premium | ARMA daily [95% CI] | ARMA weekly [95% CI] | Theta daily | Theta weekly | Ljung-Box p, daily | Ljung-Box p, weekly |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|---:|---:|---:|
 | 2010-2019 | 514 (521) | 3.1% | 61.9 [44.9, 99.4] | 63.1 [40.4, 137.9] | -0.76 | -0.59 | 8.0e-09 | 0.280 |
 | 2020-2023 | 206 (209) | 7.3% | 54.6 [30.1, 279.5] | 63.9 [33.1, 551.5] | -0.67 | -0.49 | 3.8e-05 | 0.003 |
 | 2024-Apr 2026 | 119 (121) | 19.2% | 53.4 [26.9, 2,103.1] | 69.1 [29.6, inf] | -0.63 | -0.44 | 0.280 | 0.720 |
@@ -129,7 +129,7 @@ established; traded volumes, lagged factors and foreign flows explain nothing
 
 <!-- table:factor_betas -->
 | Sample | Weeks | ADR beta [95% CI] | Local share beta, USD [95% CI] | Difference = beta of d q [95% CI] |
-|---|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|
 | full | 852 | 1.06 [0.93, 1.18] | 0.85 [0.71, 0.99] | 0.20 [0.14, 0.27] |
 | 2010-2019 | 506 | 0.98 [0.87, 1.09] | 0.82 [0.70, 0.94] | 0.16 [0.08, 0.24] |
 | 2020-2023 | 203 | 0.95 [0.75, 1.16] | 0.74 [0.51, 0.98] | 0.21 [0.10, 0.32] |
@@ -159,7 +159,7 @@ convergence are asynchrony
 
 <!-- table:backtest_headline -->
 | P&L | Total | Annual return | Annual vol, daily marks | Annual vol, weekly | Sharpe, daily | Sharpe, weekly [95% bootstrap CI] | Max drawdown | Winning trades |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Gross | 0.360 | 2.21% | 19.3% | 10.5% | 0.11 | 0.21 [-0.04, 0.47] | -0.23 | 79% |
 | Net | 0.088 | 0.54% | 19.3% | 10.5% | 0.03 | 0.05 [-0.19, 0.29] | -0.25 | 61% |
 
@@ -176,7 +176,7 @@ the gain comes from the rise of the index, not from lower risk
 
 <!-- table:robustness_costs -->
 | Cost scenario | All-in cost per round trip | Net P&L | Net Sharpe, weekly | Tax share of costs |
-|---|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|
 | Default | 82 bp | 0.088 | 0.05 | 39% |
 | Institutional | 52 bp | 0.187 | 0.11 | 61% |
 | Tax only | 32 bp | 0.255 | 0.15 | 100% |
@@ -198,7 +198,7 @@ the 3 securities
 
 <!-- table:step6_hypotheses -->
 |  | Criterion | TSMC (in sample) | UMC | ASE | Chunghwa | Aggregation |
-|---|---|---|---|---|---|---|
+|:---|:---|:---|:---|:---|:---|:---|
 | H1 | < -0.2 | -0.452 | -0.454 yes | -0.460 yes | -0.469 yes | 3/3, generalised |
 | H2 | ARMA > 2 x AR(1) | ARMA 69.6 d vs AR(1) 9.0 d (160 windows) | ARMA 32.9 d vs AR(1) 3.4 d (159 windows) yes | ARMA 120.6 d vs AR(1) 9.1 d (59 windows) yes | ARMA 4.4 d vs AR(1) 2.2 d (146 windows) no | 2/3, generalised |
 | H3 | difference > 0, 95% CI above 0 | 0.203 [0.139, 0.268] (ADR 1.06, local 0.85) | 0.107 [0.015, 0.199] (ADR 0.97, local 0.86) yes | 0.202 [0.099, 0.305] (ADR 1.34, local 1.13) yes | 0.038 [0.006, 0.070] (ADR 0.23, local 0.19) yes | 3/3, generalised |
@@ -240,7 +240,7 @@ Vishny, 1997). D* is a lower bound
 
 <!-- table:arbitrage_band -->
 | Security | h (trading days) | D*, default, T = h | D*, default, T = 2h | D*, institutional, T = h | D*, institutional, T = 2h | Weeks with deviation > D* (default, T = h) | Weeks with abs deviation > D* | Deviation std (points) |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
+|:---|---:|---:|---:|---:|---:|---:|---:|---:|
 | TSMC | 69.6 | 1.68 | 1.30 | 1.02 | 0.77 | 23% | 45% | 2.55 |
 | UMC | 32.9 | 1.53 | 1.11 | 0.95 | 0.67 | 19% | 44% | 2.88 |
 | ASE | 120.6 | 1.88 | 1.57 | 1.12 | 0.91 | 22% | 42% | 2.67 |

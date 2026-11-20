@@ -1,5 +1,5 @@
 | Cost | Default | Institutional scenario | Source |
-|---|---:|---:|---|
+|:---|---:|---:|:---|
 | ADR commission, per transaction | 5 bp | 2 bp | assumption, not verified |
 | Local commission, per transaction | 10 bp | 3 bp | assumption; regulatory ceiling 0.1425% (Taipei Times, 2000), discounts common |
 | Taiwan securities transaction tax, on sales of the local share | 30 bp | 30 bp | 0.3% of the sale proceeds, stated in TSMC's 20-F (2026) and secondary sources |
