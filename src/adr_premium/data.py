@@ -99,3 +99,34 @@ def download_market(start: str = "2010-01-01", end: str | None = None, refresh: 
     DATA_DIR.mkdir(exist_ok=True)
     market.to_csv(cache)
     return market
+
+
+def _dividend_series(ticker: str) -> pd.Series:
+    """Cash dividends per share from yfinance, indexed by ex-date in the exchange's own time zone."""
+    import yfinance as yf
+
+    div = yf.Ticker(ticker).dividends
+    if div.empty:
+        raise RuntimeError(f"No dividends for {ticker}")
+    # The timestamps are local to each exchange (09:30 New York, 09:00 Taipei): dropping
+    # the time zone keeps the local calendar date of the ex-date.
+    div.index = pd.DatetimeIndex(div.index).tz_localize(None).normalize()
+    return div.astype(float)
+
+
+def download_dividends(refresh: bool = False) -> pd.DataFrame:
+    """Ex-date cash dividends (columns adr in USD per ADR, local in TWD per share), cached in CSV.
+
+    Amounts are as reported by Yahoo (gross, before any withholding tax); a missing value
+    means no ex-date on that day for that line.
+    """
+    cache = DATA_DIR / "dividends.csv"
+    if cache.exists() and not refresh:
+        return pd.read_csv(cache, index_col=0, parse_dates=True)
+
+    out = {key: _dividend_series(TICKERS[key]) for key in ("adr", "local")}
+    div = pd.concat(out, axis=1, join="outer").sort_index()
+    div.index.name = "ex_date"
+    DATA_DIR.mkdir(exist_ok=True)
+    div.to_csv(cache)
+    return div
