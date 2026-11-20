@@ -1,14 +1,17 @@
-"""Generate every table of the interim report from the data in data/.
+"""Generate every table of the final reports from the data in data/.
 
-Each table is written as Markdown to report/tables/<name>.md. If the report exists,
-the content between the markers <!-- table:<name> --> and <!-- /table:<name> --> is
-replaced by the table, so no number in a report table is typed by hand.
+Each table is written as Markdown to docs/tables/<name>.md. In docs/technical_report.md
+and docs/report.md, the content between the markers <!-- table:<name> --> and
+<!-- /table:<name> --> is replaced by the table, so no number in a report table is
+typed by hand. Tables for steps 1 to 3 are defined here, those for steps 4 to 7 in
+report_tables_steps4_7.py.
 
 Inputs: data/raw_closes.csv and data/fx_fred.csv (through the project loaders),
 data/premium_same_day.csv, data/premium_prev_ny.csv, data/premium_table.csv,
-data/mean_reversion_results.csv and data/level_shift_simulation.csv. Run
-build_premium.py, export_premium_table.py, mean_reversion.py and
-simulate_level_shift.py first.
+data/mean_reversion_results.csv, data/level_shift_simulation.csv and the result files
+of steps 4 to 7 (see report_tables_steps4_7.py). Run build_premium.py,
+export_premium_table.py, mean_reversion.py, simulate_level_shift.py, factors.py,
+backtest.py, backtest_robustness.py, step6_out_of_sample.py and arbitrage_band.py first.
 
 Usage: python scripts/make_report_tables.py
 """
@@ -36,10 +39,11 @@ from adr_premium.data import download, download_fred_fx
 from adr_premium.premium import ADR_RATIO, asynchrony_diagnostics, premium_prev_ny, premium_same_day
 from adr_premium.stats import ar1_half_life, arma11_half_life, level_shift as _level_shift, to_weekly
 from compare_fx import GAP_THRESHOLD, compare_flagged, persistent_gaps, relative_gap
+from report_tables_steps4_7 import TABLES_LATE, issue_rows, load_late
 
 DATA = ROOT / "data"
-TABLES = ROOT / "report" / "tables"
-REPORT = ROOT / "report" / "interim_report.md"
+TABLES = ROOT / "docs" / "tables"
+REPORTS = [ROOT / "docs" / "technical_report.md", ROOT / "docs" / "report.md"]
 
 MANUAL_CHECK_DATE = "2026-06-23"
 # Values reported by two news articles of 23 June 2026 (secondary sources):
@@ -110,6 +114,7 @@ def load() -> dict:
         "same": read("premium_same_day.csv"), "prev": read("premium_prev_ny.csv"),
         "table": read("premium_table.csv"), "mr": mr,
         "yahoo": yahoo, "removed": removed, "flagged": flag_fx(yahoo),
+        "late": load_late(),
     }
 
 
@@ -760,6 +765,7 @@ def t_issues(d: dict) -> str:
          f"placebo dates reject); monthly mean {pct(means[pd.Period('2025-12')])} in December 2025, "
          f"{pct(means[pd.Period('2026-01')])} in January 2026"],
     ]
+    rows += issue_rows(d["late"])
     return md(pd.DataFrame(rows, columns=["Issue", "How it was detected", "Fix", "Impact (before -> after)"]),
               ["l", "l", "l", "l"])
 
@@ -783,11 +789,11 @@ TABLES_IN_ORDER = [
     ("jumps", t_jumps), ("example", t_example), ("stationarity", t_stationarity), ("ar1_naive", t_ar1_naive),
     ("simulation", t_simulation), ("arma", t_arma), ("rolling", t_rolling), ("level_shift_sim", t_level_shift_sim), ("chow", t_chow),
     ("issues", t_issues), ("versions", t_versions), ("key_figures", t_key_figures),
-]
+] + [(name, (lambda fn: lambda d: fn(d["late"]))(fn)) for name, fn in TABLES_LATE]
 
 
-def fill_report(tables: dict[str, str]) -> None:
-    text = REPORT.read_text()
+def fill_report(report: Path, tables: dict[str, str]) -> None:
+    text = report.read_text()
     for name, content in tables.items():
         pattern = re.compile(rf"(<!-- table:{name} -->\n).*?(<!-- /table:{name} -->)", re.S)
         if not pattern.search(text):
@@ -795,8 +801,8 @@ def fill_report(tables: dict[str, str]) -> None:
         text = pattern.sub(lambda m: m.group(1) + content + m.group(2), text)
     missing = set(re.findall(r"<!-- table:(\w+) -->", text)) - set(tables)
     if missing:
-        raise ValueError(f"Unknown tables referenced in the report: {sorted(missing)}")
-    REPORT.write_text(text)
+        raise ValueError(f"Unknown tables referenced in {report.name}: {sorted(missing)}")
+    report.write_text(text)
 
 
 def main() -> None:
@@ -807,9 +813,10 @@ def main() -> None:
         tables[name] = fn(d)
         (TABLES / f"{name}.md").write_text(tables[name])
         print(f"{name}: {tables[name].count(chr(10)) - 2} rows")
-    if REPORT.exists():
-        fill_report(tables)
-        print(f"Tables inserted into {REPORT}")
+    for report in REPORTS:
+        if report.exists():
+            fill_report(report, tables)
+            print(f"Tables inserted into {report.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":
