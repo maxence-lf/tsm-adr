@@ -3,9 +3,9 @@
 Measuring and modelling the premium of TSMC's NYSE-listed ADR (TSM) over its
 Taiwan-listed shares (2330.TW), and asking why arbitrage does not close it.
 
-**Status:** work in progress. Data pipeline, mean reversion, explanatory factors and
-trading strategy done; extension to other Taiwanese ADRs next. Target completion:
-February 2027.
+**Status:** work in progress. Data pipeline, mean reversion, explanatory factors,
+trading strategy and out-of-sample test on three other Taiwanese ADRs done. Target
+completion: February 2027.
 
 ## Research questions
 1. What drives the premium?
@@ -29,6 +29,10 @@ February 2027.
   0.05 [-0.19, 0.29]. Its timing beats random entries (p = 0.01), but costs of 82 bp per
   round trip, 39% of them Taiwan's transaction tax, absorb most of a 109 bp gross edge,
   and a one-day execution delay turns the net result negative.
+- **Out of sample.** On UMC, ASE and Chunghwa, with a pre-registered plan, asynchrony
+  noise, the higher US market beta of the ADR and the failure of the strategy after
+  costs are confirmed on all three; the half-life correction on two of three. The
+  strategy loses on all three, so its small TSMC gain should be read as in sample.
 
 ## Key methodological issue: non-synchronous prices
 Taipei closes at 05:30 UTC, New York at 20:00/21:00 UTC, so no pair of closing
@@ -61,6 +65,9 @@ noise comes from the non-synchronous closes and not from the exchange rate.
 ## Data
 - Prices: daily unadjusted closes from Yahoo Finance via `yfinance` (unofficial
   API) for TSM (USD) and 2330.TW (TWD).
+- ADS ratio: 1 TSM ADS = 5 common shares, confirmed in the 20-F filings of 2010
+  ("each ADS represents the right to receive five common shares") and 2026 ("each ADS
+  represents five (5) common shares").
 - Exchange rate: FRED series DEXTAUS (Federal Reserve H.10, TWD per USD), recorded
   at noon New York time.
 - Yahoo TWD=X is kept for comparison only (`scripts/compare_fx.py`).
@@ -355,8 +362,7 @@ episodes say nothing about its resilience.
 about 1.1% per trade is real in timing but is consumed by 0.8% of costs, more than a
 third of them the Taiwan transaction tax, which is a quantified answer to the limits
 of arbitrage. A signal taken at the NY close, suggested by the asynchrony result, came
-out of these results and will only be tested out of sample (step 6, other Taiwanese
-ADRs).
+out of these results and was therefore tested only out of sample (step 6 below).
 
 ![Cumulative gross and net P&L, in-position periods shaded](figures/backtest_cumulative_pnl.png)
 
@@ -370,6 +376,76 @@ ADRs).
 - EY, Taiwan raises the non-resident withholding rate to 21% (2018): https://globaltaxnews.ey.com/news/2018-5118-taiwan-increases-withholding-tax-rate-for-nonresident-recipients-without-fixed-place-of-business-in-taiwan
 - Investment Taiwan, Bravo! Taiwan 2024: https://investtaiwan.nat.gov.tw/eBook/BravoTaiwan/2024ebook_en/files/basic-html/page33.html
 
+## Out-of-sample test (step 6)
+The TSMC findings were tested on three other Taiwanese ADRs, UMC (UMC / 2303.TW),
+ASE Technology Holding (ASX / 3711.TW) and Chunghwa Telecom (CHT / 2412.TW), with a
+plan written before any of their data was downloaded:
+[`docs/preregistration_step6.md`](docs/preregistration_step6.md), committed and tagged
+`prereg-step6` (commit `912658ae89d237d2a549db5a82a8e209968696f2`) before the first
+download. The methods and parameters are those of the TSMC code, with no new parameter;
+the plan only adds a higher-cost scenario, a fifth hypothesis and an aggregation rule:
+a hypothesis is "generalised" if it is confirmed for at least 2 of the 3 securities.
+Code: `scripts/step6_out_of_sample.py`; results in `data/step6_hypotheses.csv` and
+`data/step6_results.csv`.
+
+ADS ratios and listing dates were checked in 20-F filings: 5 shares per ADS for UMC,
+2 for ASE, 10 for Chunghwa. ASE Technology Holding exists since 2018-04-30 (earlier
+"ASX" data belongs to a different company with a different ratio), so its sample starts
+then; Chunghwa's sample starts on 2011-03-01, after a capital reduction paid on
+2011-01-25. The samples end on 2026-10-30, as for TSMC.
+
+| Hypothesis and criterion | TSMC (in sample) | UMC | ASE | Chunghwa | Verdict |
+|---|---|---|---|---|---|
+| H1: lag-1 autocorrelation of daily premium changes < -0.2 | -0.452 | -0.454 yes | -0.460 yes | -0.469 yes | 3/3, generalised |
+| H2: median weekly ARMA(1,1) half-life > 2 x median weekly AR(1), rolling 3-year windows (trading days) | 69.6 vs 9.0 | 32.9 vs 3.4 yes | 120.6 vs 9.1 yes | 4.38 vs 2.21 no | 2/3, generalised |
+| H3: S&P 500 beta of the ADR minus that of the local share in USD > 0, 95% CI above 0 | 0.203 [0.139, 0.268] | 0.107 [0.015, 0.199] yes | 0.202 [0.099, 0.305] yes | 0.038 [0.006, 0.070] yes | 3/3, generalised |
+| H4: 95% bootstrap CI of the net weekly Sharpe ratio contains 0 or is below 0 | 0.05 [-0.19, 0.29] | -0.25 [-0.59, 0.10] yes | -0.30 [-0.87, 0.18] yes, weak (low power) | -0.10 [-0.42, 0.20] yes | 3/3, generalised |
+| H5: net P&L of a signal at the NY close minus that of `prev_ny` > 0 [95% CI] | not evaluated | +0.40 [-0.19, +1.00] yes | +0.37 [-0.19, +0.93] yes | -0.09 [-0.29, +0.11] no | 2/3, generalised |
+
+| Strategy, a priori rules and default costs | TSMC | UMC | ASE | Chunghwa |
+|---|---:|---:|---:|---:|
+| Trades | 33 | 41 | 21 | 46 |
+| Gross P&L | 0.360 | -0.008 | -0.059 | 0.316 |
+| Net P&L | 0.088 | -0.340 | -0.240 | -0.049 |
+| Random-entry p-value, gross | 0.012 | 0.58 | 0.63 | 0.0005 |
+
+**Reading.**
+- H1, H3 and H4 are generalised on 3 of 3 securities: asynchrony noise, the higher US
+  market beta of the ADR and the failure of the strategy after costs are not specific
+  to TSMC.
+- H2 is generalised on 2 of 3. Chunghwa misses the criterion by 0.035 trading days
+  (4.378 against a threshold of 4.413); the rule is applied as written.
+- H4 is confirmed for different reasons. UMC and ASE already lose before costs.
+  Chunghwa's timing is significant (random-entry p-value 0.0005), but its gross gain of
+  69 bp per trade is below its costs of 79 bp.
+- H5 satisfies the aggregation rule, but no difference is significant: every interval
+  contains 0. It is not concluded that a signal at the NY close is better. This is a
+  limit of the plan: its aggregation rule counted weak confirmations.
+- The strategy earns money, marginally, only on TSMC, the security its rules were
+  designed on, and loses on the other three. Although the rules were fixed before any
+  backtest, they were chosen with knowledge of TSMC's premium, and the TSMC result
+  should be read as in sample.
+
+**Exploratory observation** (four securities only, not tested): the persistence of the
+premium seems to increase with the difference in US market beta. Chunghwa has a
+difference of 0.04, a premium close to 0 (mean -0.2%, std 0.8%) and a half-life of a few
+days; the three semiconductor ADRs have differences of 0.11 to 0.20 and half-lives of
+33 to 121 trading days. The mean premium level does not follow the same order (1.9%
+for UMC, 1.8% for ASE, 6.5% for TSMC), and UMC's mean is driven by 2010, when its
+premium fell from about 46% to 2% by mid-2011.
+
+**Deviations from the plan.**
+- The plan's text says mean reversion is estimated on q = ln(1 + premium), while the
+  TSMC code it refers to uses the premium itself. The TSMC code was followed; on q,
+  marked exploratory, the H2 verdicts are the same for all three securities.
+- Yahoo has no local Chunghwa dividend for the ADR dividend of 2013-07-15 (1.777 USD).
+  It was reported and kept; no trade held the position over that date.
+- Two ASE trades and one Chunghwa trade are not hedged in the beta-hedge variant, for
+  lack of 52 weeks of history, as the plan's rule requires.
+- No price or exchange-rate value was corrected; no daily return exceeded 25%.
+
+![Weekly prev_ny premium of UMC, ASE and Chunghwa](figures/step6_premiums.png)
+
 ## Reproduce
 Requires Python 3.12.
 
@@ -382,6 +458,7 @@ Requires Python 3.12.
     python scripts/factors.py
     python scripts/backtest.py
     python scripts/backtest_robustness.py
+    python scripts/step6_out_of_sample.py
 
 ## Roadmap
 - [x] Data pipeline and premium construction (two alignments, unit tests)
@@ -389,7 +466,7 @@ Requires Python 3.12.
 - [x] Stationarity, mean reversion (ADF, AR(1), ARMA(1,1) half-life); structural breaks tested, not conclusive
 - [x] Explanatory factors (US market, FX, volumes); foreign flows not available
 - [x] Strategy backtest with rules fixed a priori, transaction costs, bootstrapped Sharpe, random-entry Monte-Carlo, beta hedge
-- [ ] Extension to other Taiwanese ADRs (UMC, ASE, Chunghwa Telecom), with an out-of-sample test of a signal taken at the NY close
+- [x] Pre-registered out-of-sample test on other Taiwanese ADRs (UMC, ASE, Chunghwa Telecom), including a signal taken at the NY close
 
 ## Tools
 Python, pandas, statsmodels, matplotlib, pytest. Development assisted by Claude Code.
