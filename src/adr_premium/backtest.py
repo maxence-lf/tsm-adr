@@ -10,7 +10,8 @@ Each leg trades at the first closing price strictly after that moment:
 - ADR: NY close of the first NY trading date >= d (NY closes after Taipei on the
   same calendar date);
 - local share: Taipei close of the first Taipei trading date > d;
-- FX: FRED rate (noon New York) of the ADR's NY execution date.
+- FX: FRED rate (noon New York) of the local leg's execution date, for both the
+  conversion into TWD at entry and the conversion of the sale proceeds at exit.
 The ``extra_lag`` option moves each leg by that many further trading days on its own
 exchange.
 
@@ -22,6 +23,10 @@ no order could have captured.
 
 Units: each trade puts 1 USD in each leg (long local, short ADR). P&L is in USD per
 1 USD per leg, without compounding; divide by 2 for a return on gross exposure.
+
+Financing: the proceeds of the ADR short sale are assumed to fund the purchase of the
+local share. Neither interest on the short proceeds nor a financing cost of the long
+leg is modelled; the only carry cost is the ADR borrow fee.
 """
 from __future__ import annotations
 
@@ -31,6 +36,9 @@ import numpy as np
 import pandas as pd
 
 from adr_premium.premium import ADR_RATIO, premium_prev_ny
+
+FINANCING_ASSUMPTION = ("Financing: the ADR short-sale proceeds fund the local purchase; no interest "
+                        "income or financing cost is modelled, only the ADR borrow fee.")
 
 # ---------------------------------------------------------------------------
 # Rules fixed a priori: chosen BEFORE any backtest was run and never tuned on the
@@ -78,10 +86,14 @@ class Costs:
     # Withholding tax on local dividends received by a non-resident. Assumption, not
     # verified (21% general rate since 2018, 20% before; treaties can lower it).
     dividend_withholding: float = 0.21
+    # Whether the ADR short pays the lender the dividend net of withholding (True) or
+    # the gross ADR dividend (False, default). Assumption, not verified.
+    short_pays_net_dividend: bool = False
 
     @classmethod
     def zero(cls) -> "Costs":
-        return cls(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        return cls(adr_commission=0.0, local_commission=0.0, local_sale_tax=0.0, fx_conversion=0.0,
+                   adr_borrow_fee=0.0, dividend_withholding=0.0)
 
 
 def _clean(s: pd.Series) -> pd.Series:
@@ -193,6 +205,15 @@ class Market:
     calendar: pd.DatetimeIndex
     ratio: int = ADR_RATIO
 
+    def __post_init__(self):
+        self._fx_dates = self.fx.index.to_numpy()
+        self._fx_values = self.fx.to_numpy()
+        self._div = {}
+        for col in ("adr", "local"):
+            d = self.dividends[col].dropna() if col in self.dividends else pd.Series(dtype=float)
+            d.index = pd.DatetimeIndex(d.index)
+            self._div[col] = d.astype(float)
+
     @classmethod
     def build(cls, adr, local, fx, dividends=None, ratio: int = ADR_RATIO) -> "Market":
         adr, local, fx = _clean(adr), _clean(local), _clean(fx)
@@ -202,79 +223,128 @@ class Market:
         return cls(adr, local, fx, dividends, cal, ratio)
 
     def fx_at(self, date) -> float:
-        """FRED rate at or before ``date`` (a NY execution date)."""
-        return float(self.fx.asof(date))
+        """FRED rate at or before ``date``."""
+        i = self._fx_dates.searchsorted(np.datetime64(date), side="right") - 1
+        return float(self._fx_values[i]) if i >= 0 else np.nan
+
+    def dividends_between(self, col: str, start, end) -> pd.Series:
+        """Ex-dates in (start, end]: a holder at the close before the ex-date is paid."""
+        d = self._div[col]
+        return d[(d.index > start) & (d.index <= end)]
 
     def on_calendar(self, s: pd.Series) -> pd.Series:
         """Last value at or before each calendar date."""
         return s.reindex(s.index.union(self.calendar)).ffill().reindex(self.calendar)
 
 
-def trade_path(trade: pd.Series, mkt: Market, costs: Costs) -> pd.DataFrame:
+@dataclass
+class TradeTerms:
+    """Execution prices, rates and dated one-off flows of one trade."""
+    a_in: pd.Timestamp
+    a_out: pd.Timestamp
+    l_in: pd.Timestamp
+    l_out: pd.Timestamp
+    pa_in: float
+    pa_out: float
+    pl_in: float
+    pl_out: float
+    fx_in: float
+    fx_out: float
+    shares: float  # local shares bought with 1 USD
+    local_exit_usd: float  # USD proceeds of the local sale
+    flows: list  # (date, component, signed amount)
+    borrow_total: float  # signed, over the whole holding period
+
+
+def trade_terms(trade, mkt: Market, costs: Costs) -> TradeTerms:
+    """Execution terms of one trade.
+
+    The local leg is converted at the FRED rate of its own execution dates: 1 USD is
+    converted to TWD on the local entry date, and the sale proceeds back to USD on the
+    local exit date.
+
+    Financing assumption: the proceeds of the ADR short sale fund the purchase of the
+    local share. No interest is earned on the short proceeds and no financing cost is
+    charged on the long leg; the only carry modelled is the ADR borrow fee.
+    """
+    a_in, a_out = pd.Timestamp(trade["adr_entry_date"]), pd.Timestamp(trade["adr_exit_date"])
+    l_in, l_out = pd.Timestamp(trade["local_entry_date"]), pd.Timestamp(trade["local_exit_date"])
+    pa_in, pa_out = float(mkt.adr.loc[a_in]), float(mkt.adr.loc[a_out])
+    pl_in, pl_out = float(mkt.local.loc[l_in]), float(mkt.local.loc[l_out])
+    fx_in, fx_out = mkt.fx_at(l_in), mkt.fx_at(l_out)
+    shares = fx_in / pl_in  # 1 USD converted to TWD, then local shares bought
+    local_exit_usd = shares * pl_out / fx_out
+    wht = costs.dividend_withholding
+
+    flows = []
+    for ex, amount in mkt.dividends_between("local", l_in, l_out).items():
+        gross = shares * amount / mkt.fx_at(ex)
+        flows += [(ex, "dividends_gross", gross), (ex, "withholding_tax", -wht * gross)]
+    for ex, amount in mkt.dividends_between("adr", a_in, a_out).items():
+        gross = amount / pa_in
+        flows.append((ex, "dividends_gross", -gross))
+        if costs.short_pays_net_dividend:
+            # The short owes the dividend net of withholding: the saving is booked
+            # against withholding_tax, so the gross P&L is the same in both cases.
+            flows.append((ex, "withholding_tax", wht * gross))
+
+    flows += [
+        (a_in, "adr_commission", -costs.adr_commission * 1.0),
+        (a_out, "adr_commission", -costs.adr_commission * pa_out / pa_in),
+        (l_in, "local_commission", -costs.local_commission * 1.0),
+        (l_out, "local_commission", -costs.local_commission * local_exit_usd),
+        # The transaction tax applies to sales of the local share only (here: the exit).
+        (l_out, "local_tax", -costs.local_sale_tax * local_exit_usd),
+        (l_in, "fx_conversion", -costs.fx_conversion * 1.0),  # USD -> TWD
+        (l_out, "fx_conversion", -costs.fx_conversion * local_exit_usd),  # TWD -> USD
+    ]
+    borrow = -costs.adr_borrow_fee * (a_out - a_in).days / 365.0
+    return TradeTerms(a_in, a_out, l_in, l_out, pa_in, pa_out, pl_in, pl_out, fx_in, fx_out,
+                      shares, local_exit_usd, flows, borrow)
+
+
+def trade_final(trade, mkt: Market, costs: Costs) -> pd.Series:
+    """Final P&L components of one trade (fast: no daily path)."""
+    t = trade_terms(trade, mkt, costs)
+    out = dict.fromkeys(PNL_COMPONENTS, 0.0)
+    out["price_fx"] = (1 - t.pa_out / t.pa_in) + (t.local_exit_usd - 1)
+    for _, col, amount in t.flows:
+        out[col] += amount
+    out["borrow_fee"] = t.borrow_total
+    return pd.Series(out)
+
+
+def trade_path(trade, mkt: Market, costs: Costs) -> pd.DataFrame:
     """Cumulative P&L components of one trade on every calendar date (USD per 1 USD leg).
 
     Components (costs are negative):
-    - price_fx: mark-to-market of both legs on their own closes, local leg converted
-      at the FRED rate of each date and, at exit, at the exit rate;
+    - price_fx: mark-to-market of both legs on their own closes, the local leg
+      converted at the FRED rate of each date while held;
     - dividends_gross: local dividends received (gross) minus ADR dividends paid by the
       short, booked on the ex-date. Both legs drop by their dividend on that date, so
       price_fx + dividends_gross is the total return before frictions;
     - withholding_tax, adr_commission, local_commission, local_tax (sales only),
       fx_conversion, borrow_fee.
     """
+    t = trade_terms(trade, mkt, costs)
     cal = mkt.calendar
-    a_in, a_out = trade["adr_entry_date"], trade["adr_exit_date"]
-    l_in, l_out = trade["local_entry_date"], trade["local_exit_date"]
-    pa_in, pa_out = float(mkt.adr.loc[a_in]), float(mkt.adr.loc[a_out])
-    pl_in, pl_out = float(mkt.local.loc[l_in]), float(mkt.local.loc[l_out])
-    fx_in, fx_out = mkt.fx_at(a_in), mkt.fx_at(a_out)
-    shares = fx_in / pl_in  # 1 USD converted to TWD, then local shares bought
-    local_exit_usd = shares * pl_out / fx_out
-
     out = pd.DataFrame(0.0, index=cal, columns=PNL_COMPONENTS)
 
     # Short ADR: 1 USD sold at pa_in.
-    adr_c = mkt.on_calendar(mkt.adr)
-    adr_pnl = 1 - adr_c / pa_in
-    adr_pnl[cal < a_in] = 0.0
-    adr_pnl[cal >= a_out] = 1 - pa_out / pa_in
+    adr_pnl = 1 - mkt.on_calendar(mkt.adr) / t.pa_in
+    adr_pnl[cal < t.a_in] = 0.0
+    adr_pnl[cal >= t.a_out] = 1 - t.pa_out / t.pa_in
     # Long local: valued at the FRED rate of each date while held.
-    loc_c, fx_c = mkt.on_calendar(mkt.local), mkt.on_calendar(mkt.fx)
-    loc_pnl = shares * loc_c / fx_c - 1
-    loc_pnl[cal < l_in] = 0.0
-    loc_pnl[cal >= l_out] = local_exit_usd - 1
+    loc_pnl = t.shares * mkt.on_calendar(mkt.local) / mkt.on_calendar(mkt.fx) - 1
+    loc_pnl[cal < t.l_in] = 0.0
+    loc_pnl[cal >= t.l_out] = t.local_exit_usd - 1
     out["price_fx"] = adr_pnl + loc_pnl
 
-    # Dividends: a holder at the close before the ex-date receives (or owes) it.
-    div = mkt.dividends
-    if len(div):
-        for col, start, end in (("local", l_in, l_out), ("adr", a_in, a_out)):
-            d = div[col].dropna()
-            d = d[(d.index > start) & (d.index <= end)]
-            for ex, amount in d.items():
-                booked = cal >= ex
-                if col == "local":
-                    gross = shares * amount / mkt.fx_at(ex)
-                    out.loc[booked, "dividends_gross"] += gross
-                    out.loc[booked, "withholding_tax"] -= costs.dividend_withholding * gross
-                else:
-                    out.loc[booked, "dividends_gross"] -= amount / pa_in
-
-    # Transaction costs, booked on each execution date.
-    def book(col, date, amount):
-        out.loc[cal >= date, col] -= amount
-
-    book("adr_commission", a_in, costs.adr_commission * 1.0)
-    book("adr_commission", a_out, costs.adr_commission * pa_out / pa_in)
-    book("local_commission", l_in, costs.local_commission * 1.0)
-    book("local_commission", l_out, costs.local_commission * local_exit_usd)
-    # The transaction tax applies to the sale of the local share only (here: the exit).
-    book("local_tax", l_out, costs.local_sale_tax * local_exit_usd)
-    book("fx_conversion", a_in, costs.fx_conversion * 1.0)  # USD -> TWD
-    book("fx_conversion", l_out, costs.fx_conversion * local_exit_usd)  # TWD -> USD
+    for date, col, amount in t.flows:
+        out.loc[cal >= date, col] += amount
 
     # Borrow fee on the initial short notional, pro rata on calendar days.
-    days = np.clip((cal - a_in).days, 0, (a_out - a_in).days)
+    days = np.clip((cal - t.a_in).days, 0, (t.a_out - t.a_in).days)
     out["borrow_fee"] = -costs.adr_borrow_fee * days / 365.0
     return out
 
@@ -313,10 +383,10 @@ def run_backtest(adr: pd.Series, local: pd.Series, fx: pd.Series, dividends=None
         records.append({
             "adr_entry_price": float(mkt.adr.loc[t["adr_entry_date"]]),
             "local_entry_price": float(mkt.local.loc[t["local_entry_date"]]),
-            "fx_entry": mkt.fx_at(t["adr_entry_date"]),
+            "fx_entry": mkt.fx_at(t["local_entry_date"]),
             "adr_exit_price": float(mkt.adr.loc[t["adr_exit_date"]]),
             "local_exit_price": float(mkt.local.loc[t["local_exit_date"]]),
-            "fx_exit": mkt.fx_at(t["adr_exit_date"]),
+            "fx_exit": mkt.fx_at(t["local_exit_date"]),
             "holding_days": (last - first).days,
             **final.to_dict(),
         })

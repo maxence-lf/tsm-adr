@@ -27,8 +27,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from adr_premium.backtest import (COST_COMPONENTS, Costs, Rules, check_dividends, cost_breakdown,
-                                  metrics, run_backtest)
+from adr_premium.backtest import (FINANCING_ASSUMPTION, Costs, Rules, check_dividends,
+                                  cost_breakdown, metrics, run_backtest)
 from adr_premium.clean import prepare_fred_fx
 from adr_premium.data import download, download_dividends, download_fred_fx
 
@@ -139,6 +139,7 @@ def main() -> None:
     rows, trade_tables = [], []
     base_rules, base_costs = Rules(), Costs()
     runs = [("a_priori", base_rules, base_costs),
+            ("short_pays_net_dividend", base_rules, replace(base_costs, short_pays_net_dividend=True)),
             ("execution_lag_1d", replace(base_rules, extra_lag=1), base_costs)]
     runs += [(f"grid_entry{e}_window{w}", replace(base_rules, entry_z=e, window=w), base_costs)
              for e in ENTRY_GRID for w in WINDOW_GRID]
@@ -161,6 +162,9 @@ def main() -> None:
     print("\n=== HEADLINE RESULT: rules fixed a priori (entry z > 1.5, window 26, exit z < 0 "
           "or 26 weeks), default costs ===")
     print(f"Sample: {main_res.start.date()} to {main_res.daily.index[-1].date()}")
+    print(FINANCING_ASSUMPTION)
+    print("FX: the local leg is converted at the FRED rate of its own execution dates. "
+          "The ADR short pays the GROSS ADR dividend (see the net variant below).")
     m_cols = ["pnl", "ann_return", "ann_vol", "sharpe", "ann_vol_weekly", "sharpe_weekly",
               "max_drawdown", "total_pnl", "n_trades", "avg_holding_weeks", "win_rate", "exposure"]
     head = table[(table["scenario"] == "a_priori") & (table["period"] == "full")]
@@ -168,6 +172,10 @@ def main() -> None:
 
     print("\nP&L decomposition, full sample (USD per 1 USD per leg):")
     print(cost_breakdown(main_res.daily).to_string(float_format=lambda x: f"{x:+.4f}"))
+
+    print("\nVariant: the ADR short pays the dividend NET of withholding:")
+    netdiv = table[(table["scenario"] == "short_pays_net_dividend") & (table["period"] == "full")]
+    print(show(netdiv, m_cols + ["sum_withholding_tax"]))
 
     print("\nBy sub-period (a priori rules):")
     sub = table[(table["scenario"] == "a_priori") & (table["period"] != "full")]

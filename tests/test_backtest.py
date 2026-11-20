@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from adr_premium.backtest import (Costs, Market, Rules, execution_dates, run_backtest,
-                                  trade_path, weekly_signal)
+                                  trade_final, trade_path, weekly_signal)
 
 
 def _world(seed=0, n=1500, phi=0.97, sigma_q=0.01, sigma_l=0.012):
@@ -178,3 +178,35 @@ def test_tax_only_on_local_sales():
                         Costs(local_sale_tax=0.0)).iloc[-1]
     assert no_tax["local_tax"] == 0.0
     assert no_tax.drop("local_tax").equals(path.iloc[-1].drop("local_tax"))
+
+
+def test_local_leg_converted_at_local_execution_dates():
+    dates = pd.date_range("2021-01-04", "2022-01-14", freq="B")
+    fx = pd.Series(30.0, index=dates)
+    fx[dates >= "2021-01-05"] = 31.0  # local entry date
+    fx[dates >= "2022-01-05"] = 33.0  # local exit date; the ADR exits the day before at 31
+    mkt = Market.build(pd.Series(100.0, index=dates), pd.Series(600.0, index=dates), fx)
+    end = trade_path(_trade(), mkt, Costs.zero()).iloc[-1]
+    # 1 USD -> 31 TWD at entry, the same shares sold for 31 TWD -> 31/33 USD at exit.
+    assert end["price_fx"] == pytest.approx(31 / 33 - 1)
+
+
+def test_short_can_pay_the_net_adr_dividend():
+    div = pd.DataFrame({"adr": [1.5]}, index=pd.DatetimeIndex(["2021-06-15"]))
+    gross_case = trade_path(_trade(), _flat_market(div), Costs()).iloc[-1]
+    net_case = trade_path(_trade(), _flat_market(div), Costs(short_pays_net_dividend=True)).iloc[-1]
+    assert gross_case["dividends_gross"] == net_case["dividends_gross"] == pytest.approx(-0.015)
+    assert gross_case["withholding_tax"] == 0.0
+    assert net_case["withholding_tax"] == pytest.approx(0.21 * 0.015)
+
+
+def test_trade_final_matches_the_end_of_the_daily_path():
+    adr, local, fx = _world(4)
+    fx = fx * np.exp(np.random.default_rng(4).normal(0, 0.003, len(fx)).cumsum())
+    div = pd.DataFrame({"adr": [0.5, np.nan], "local": [np.nan, 3.0]},
+                       index=pd.DatetimeIndex([adr.index[300], adr.index[301]]))
+    res = run_backtest(adr, local, fx, div, rules=Rules(entry_z=1.0), costs=Costs())
+    mkt = Market.build(adr, local, fx, div)
+    for _, t in res.trades.iterrows():
+        pd.testing.assert_series_equal(trade_final(t, mkt, Costs()),
+                                       trade_path(t, mkt, Costs()).iloc[-1], check_names=False)
