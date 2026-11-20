@@ -36,25 +36,23 @@ Most of the work went into measurement and inference problems. Each would have c
 conclusion had it not been detected:
 
 <!-- table:issues_short -->
-| Issue | Impact (before -> after) |
+| Issue | Before -> after |
 |:---|:---|
-| a) Errors in the Yahoo exchange rate | `prev_ny` daily change std over 2011-2016: 2.09% -> 1.74%; minimum premium -93.7% -> -6.0% |
-| b) Measurement noise from non-synchronous closes | Autocorrelation `prev_ny`: -0.453 (Yahoo) -> -0.452 (FRED): the noise is not from the exchange rate |
-| c) AR(1) half-life biased downwards | Weekly half-life by sub-period: 7.8-17.0 (AR(1)) -> 63.1-69.1 days (ARMA) |
-| d) Sub-periods chosen after looking at the data | Weekly ARMA median 69.6 days, above 20 days in 92% of windows; its variation across windows (25.4 to 157.5 days) is rank-correlated with level shifts inside the windows (0.86, against 0.35 and 0.48 in a no-regime simulation); windows with a shift below 2 points: median 32.3 days, likely a lower bound |
-| e) Chow test at chosen break dates | Break at the candidate dates: claimed -> not conclusive (7 of 7 placebo dates reject); monthly mean 25.7% in December 2025, 20.2% in January 2026 |
-| f) US factors read on the wrong date (step 4) | Main-model S&P 500 coefficient on correctly aligned data: 0.24 |
-| g) Two collinear US indices (step 4) | Univariate S&P 500 0.203 and Nasdaq-100 0.196 -> jointly -0.063 and 0.278 |
-| h) P&L computed on premium changes (step 5) | About 2.4 points per trade of apparent convergence are not capturable |
-| i) Exchange rate of the local leg (step 5) | Gross P&L +0.0452 in total, +13.7 bp per trade (t = 1.8) |
-| j) Daily marks of two asynchronous legs (step 5) | Gross annual volatility 19.3% (daily) -> 10.5% (weekly); gross Sharpe 0.11 -> 0.21 |
-| k) Dependence on the execution day (step 5) | Gross P&L 0.360 -> 0.080; net 0.088 -> -0.191; correlation of the exit loss with the asynchrony gap 0.56 -> 0.08 without July 2020 |
-| l) A hedge that seems to work (step 5) | Net Sharpe 0.05 -> 0.10, but weekly volatility 10.5% -> 10.3%: the gain comes from the index rising |
-| m) Rules designed on TSMC (step 6) | Net P&L: TSMC +0.088 (in sample) against UMC -0.340, ASE -0.240, Chunghwa -0.049 |
-| n) Aggregation rule of H5 (step 6) | Intervals: UMC [-0.193, +0.997]; ASE [-0.190, +0.932]; Chunghwa [-0.293, +0.113] |
-| o) Plan text against plan code (step 6) | Same H2 verdict for all three securities |
-| p) Band computed on noisy deviations (step 7) | Weeks above D* (default, T = h): 4% to 23%; asynchrony per TSMC trade larger than D* |
+| a) Errors in the Yahoo exchange rate | Minimum premium -93.7% with Yahoo -> -6.0% with the official FRED rate; volatility of daily changes over 2011-2016 2.09% -> 1.74% |
+| b) Noise from non-synchronous closes | Daily changes read as real moves -> treated as noise: lag-1 autocorrelation -0.45, unchanged with the FRED rate |
+| c) Naive AR(1) half-life biased downwards | Weekly half-life within sub-periods 7.8-17.0 days (AR(1)) -> 63.1-69.1 days (signal-plus-noise ARMA(1,1)) |
+| d) Sub-periods chosen after looking at the data | Point estimates by sub-period -> a range from rolling windows: median 69.6 days over all windows, 32.3 days in windows without a level shift |
+| e) Chow test at chosen break dates | Break in April 2026 claimed -> not conclusive (7 of 7 placebo dates also reject); the decline is dated from monthly means (25.7% in December 2025, 20.2% in January 2026) |
+| h) P&L computed on premium changes | Convergence counted on the observed premium -> about 2.4 points per trade cannot be captured (1.47 already gone at entry, 0.91 at exit); P&L computed on execution prices |
+| k) Dependence on the execution day | Net P&L 0.088 when each leg trades at its first close after the decision -> -0.191 when both legs trade one day later |
+| m) Rules designed on TSMC | Strategy judged on TSMC (net P&L +0.088) -> loses on all three out-of-sample ADRs (UMC -0.340, ASE -0.240, Chunghwa -0.049) |
 <!-- /table:issues_short -->
+
+Eight further issues (alignment of the factors, collinear indices, the exchange rate of
+the local leg, asynchronous daily marks, a misleading hedge, the aggregation rule of the
+out-of-sample test, a gap between the plan's text and its code, and the noise in the
+deviations used for the no-arbitrage band) are described in
+[Section 2 of the technical report](technical_report.md#2-summary-of-methodological-issues).
 
 ## 2. Measurement
 
@@ -68,8 +66,8 @@ cannot detect. FRED replaces Yahoo, taken on the NY date of the ADR price used
 closes is simultaneous. Two definitions are computed: `same_day` (both closes of date d)
 and `prev_ny` (Taipei close of d against the previous NY close). `prev_ny` is the
 reference: it is the only one known at the Taipei close, and it is less noisy. Under both
-definitions, the lag-1 autocorrelation of daily changes is about -0.45: half of each daily
-change reverses the next day. Replacing Yahoo by FRED leaves it unchanged, so this is
+definitions, the lag-1 autocorrelation of daily changes is about -0.45: close to half of
+each daily change reverses the next day. Replacing Yahoo by FRED leaves it unchanged, so this is
 measurement noise from the non-synchronous closes, not from the exchange rate
 ([Section 5](technical_report.md#5-measuring-the-premium)).
 
@@ -122,10 +120,12 @@ read on the ADR's NY date; reading them on the Taipei date would reintroduce asy
 The ADR's S&P 500 beta is 1.06 against 0.85 for the local share in dollars, and the
 premium's S&P 500 coefficient is positive in all 167 rolling 3-year windows. A long
 local / short ADR pair therefore has an S&P 500 beta of -0.20 [-0.27, -0.14]: it is not
-market neutral. Exchange-rate changes are
-not passed to the premium one for one, but the size of the pass-through is not
-established; traded volumes, lagged factors and foreign flows explain nothing
-([Section 7](technical_report.md#7-explanatory-factors-step-4)).
+market neutral. The US market explains little of the premium's variation, however: the
+main model, with the S&P 500 and the exchange rate, explains 5.4% of the variance of
+weekly changes (4.3% for the S&P 500 alone). Exchange-rate changes are not passed to the
+premium one for one, but the size of the pass-through is not established. Traded volumes
+and lagged factors show no significant effect, and historical foreign investor flows are
+not available ([Section 7](technical_report.md#7-explanatory-factors-step-4)).
 
 <!-- table:factor_betas -->
 | Sample | Weeks | ADR beta [95% CI] | Local share beta, USD [95% CI] | Difference = beta of d q [95% CI] |
@@ -227,7 +227,12 @@ number previously approved and only to the extent that earlier ADRs have been ca
 Creation is capped, not forbidden; cancellation remains possible. The trade that would
 close a premium is limited, the one that would close a discount is not. UMC, ASE and
 Chunghwa describe the same rule
-([Section 10.1](technical_report.md#101-conversion)).
+([Section 10.1](technical_report.md#101-conversion)). Consistent with this asymmetry,
+though not tested, the weekly `prev_ny` premium shows large premiums and much smaller
+discounts for the semiconductor ADRs (maximum premium and maximum discount: TSMC 29.5% and
+-3.1%, UMC 50.1% and -9.2%, ASE 19.7% and -8.1%), while Chunghwa stays close to 0 in both
+directions (4.7% and -6.3%; 5th and 95th percentiles -1.4% and 1.2%)
+([Section 10.6](technical_report.md#106-premiums-and-discounts)).
 
 **No-arbitrage band (derived).** If a deviation D decays with half-life h, a position held
 T days captures D (1 - 0.5^(T/h)) and pays the round-trip cost C and the borrow fee. The
@@ -273,8 +278,11 @@ Prices come from an unofficial interface and were checked on individual dates on
 costs except the tax rate are assumptions. The FRED rate is published with a lag and is
 synchronous with neither close. Half-lives are a range, not a point, and their variation
 over time cannot be read as a change in the speed of reversion. The backtests have few
-trades (21 to 46 per security), so their intervals are wide. The out-of-sample test covers
-three securities, and the cross-sectional observation four. The full list of unverified
+trades (21 to 46 per security), so their intervals are wide. The 0.3% transaction tax is
+assumed constant over 2010-2026. The out-of-sample test covers three securities, and the
+cross-sectional observation four. They are Taiwanese companies listed both in Taipei and
+in New York, not a selection by market capitalisation; whether the list is exhaustive was
+not verified, and only ADRs still listed were retained, so survivorship bias is possible. The full list of unverified
 items is in [Section 12](technical_report.md#12-not-verified) of the technical report.
 
 ## References

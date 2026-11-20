@@ -939,8 +939,8 @@ verified, so the sample starts on 2011-03-01.
 No price or exchange-rate value was corrected, and no daily return exceeded 25% in
 absolute value on either line. Yahoo has no local Chunghwa dividend for the ADR dividend
 of 2013-07-15 (1.777 USD); it was reported and kept, and no trade held the position over
-that date. UMC's premium was about 46% in January 2010 and fell gradually to 2% by mid-2011,
-without a jump; it was kept. The full list of checks is in
+that date. UMC's monthly mean premium was 45.7% in January 2010 and fell gradually to 2.2%
+in June 2011, without a jump; it was kept. The full list of checks is in
 [Appendix A](#appendix-a-data-and-cleaning-details).
 
 ![Weekly prev_ny premium of UMC, ASE and Chunghwa](../figures/step6_premiums.png)
@@ -1268,8 +1268,8 @@ difference is significant (Section 9.3); nothing is concluded.
 **The level of the premium.** The exploratory link between the difference in US beta and
 the premium holds for its persistence, not for its mean level (Section 9.6).
 
-**Factors.** Traded volumes, lagged factors and foreign flows explain nothing (Section
-7.3).
+**Factors.** Traded volumes and lagged factors show no significant effect, and historical
+foreign investor flows are not available (Section 7.3).
 
 ## 12. Not verified
 
@@ -1293,6 +1293,9 @@ the premium holds for its persistence, not for its mean level (Section 9.6).
 - **Traded volumes** from Yahoo.
 - **Index returns as a proxy for futures** in the hedge, which ignores the financing and
   dividend components of a futures contract.
+- **The 0.3% transaction tax** is assumed constant over 2010-2026; its history was not
+  checked.
+- **Exhaustiveness of the list of Taiwanese ADRs** used in the out-of-sample test.
 - **Working (1960)**: volume and pages of the reference.
 
 ## 13. Limitations
@@ -1312,7 +1315,10 @@ the premium holds for its persistence, not for its mean level (Section 9.6).
 - **Backtest.** Few trades (33 for TSMC, 21 to 46 out of sample), so intervals are wide;
   financing is not modelled apart from the borrow fee; the exit FX and dividends are
   converted at FRED rates.
-- **Four securities** only for the out-of-sample test and the exploratory observation.
+- **Four securities** only for the out-of-sample test and the exploratory observation. UMC,
+  ASE and Chunghwa are Taiwanese companies listed both in Taipei and in New York, not a
+  selection by market capitalisation; whether the list is exhaustive was not verified, and
+  only ADRs still listed were retained, so survivorship bias is possible.
 
 ## References
 
@@ -1460,6 +1466,31 @@ Data checks of the out-of-sample securities:
 | Chunghwa | dividends checked |  | 16 | max |gap| 0.036 |
 | Chunghwa | dividend flagged (gap > 5% or no local match) | 2013-07-15 | 1.777 | reported, kept |
 <!-- /table:step6_data_checks -->
+
+UMC's premium in 2010-2011, kept as a market move (Section 9.1):
+
+<!-- table:umc_2010 -->
+| Month | Mean UMC `prev_ny` premium | Min | Max | Trading days |
+|:---|---:|---:|---:|---:|
+| 2010-01 | 45.7% | 38.3% | 52.4% | 19 |
+| 2010-02 | 42.4% | 37.4% | 48.3% | 13 |
+| 2010-03 | 38.7% | 33.0% | 44.4% | 23 |
+| 2010-04 | 44.1% | 41.2% | 50.1% | 21 |
+| 2010-05 | 44.7% | 36.0% | 56.8% | 21 |
+| 2010-06 | 38.0% | 29.6% | 43.1% | 21 |
+| 2010-07 | 35.2% | 28.0% | 39.8% | 22 |
+| 2010-08 | 33.3% | 28.1% | 39.4% | 22 |
+| 2010-09 | 24.5% | 18.3% | 33.8% | 21 |
+| 2010-10 | 24.7% | 18.5% | 28.2% | 21 |
+| 2010-11 | 24.6% | 17.2% | 33.2% | 22 |
+| 2010-12 | 14.0% | 10.5% | 20.9% | 23 |
+| 2011-01 | 11.5% | 4.3% | 17.4% | 20 |
+| 2011-02 | 10.9% | 8.7% | 14.3% | 14 |
+| 2011-03 | 8.2% | 2.2% | 13.0% | 23 |
+| 2011-04 | 5.9% | 2.0% | 8.1% | 19 |
+| 2011-05 | 4.5% | 1.4% | 7.8% | 21 |
+| 2011-06 | 2.2% | 0.4% | 4.5% | 21 |
+<!-- /table:umc_2010 -->
 
 ## Appendix B. Additional tables
 
@@ -1665,6 +1696,11 @@ Requires Python 3.12. From the repository root, in this order:
 
 Yahoo data can be revised after download, so a fresh download may differ slightly from
 the cached data used here.
+
+An interim report covering steps 1 to 3 existed in the history of the repository. It is
+replaced by the reports in `docs/`; the history was not rewritten, so that the hash of
+the pre-registration commit (tag `prereg-step6`) remains the record that the plan of
+Section 9 was fixed before the data.
 
 ## Appendix D. Software versions
 

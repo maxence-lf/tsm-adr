@@ -626,6 +626,37 @@ def issue_rows(L) -> list[list[str]]:
     ]
 
 
+def short_issue_rows(L) -> list[list[str]]:
+    """Rows h, k and m of the short issues table, with a before -> after readable on its own."""
+    g = _rb(L, "asynchrony_gap").astype(float)
+    b, lag = _bt(L, "a_priori"), _bt(L, "execution_lag_1d")
+    nets = {k: _v(L, k, "strategy", "default net", "total_pnl") for k in ["tsmc", "umc", "ase", "cht"]}
+    return [
+        ["h) P&L computed on premium changes",
+         f"Convergence counted on the observed premium -> about {f((g.loc['exit', 'mean'] - g.loc['entry', 'mean']) * 100, 1)} "
+         f"points per trade cannot be captured ({f(abs(g.loc['entry', 'mean']) * 100)} already gone at entry, "
+         f"{f(g.loc['exit', 'mean'] * 100)} at exit); P&L computed on execution prices"],
+        ["k) Dependence on the execution day",
+         f"Net P&L {f(b.loc['net', 'total_pnl'], 3)} when each leg trades at its first close after the decision -> "
+         f"{f(lag.loc['net', 'total_pnl'], 3)} when both legs trade one day later"],
+        ["m) Rules designed on TSMC",
+         f"Strategy judged on TSMC (net P&L {nets['tsmc']:+.3f}) -> loses on all three out-of-sample ADRs "
+         f"(UMC {nets['umc']:+.3f}, ASE {nets['ase']:+.3f}, Chunghwa {nets['cht']:+.3f})"],
+    ]
+
+
+def t_umc_2010(_):
+    """Monthly mean prev_ny premium of UMC from January 2010 to June 2011."""
+    sec = [s for s in STEP6 if s.key == "umc"][0]
+    raw = sec.clip(download(security=sec))
+    with contextlib.redirect_stdout(io.StringIO()):
+        fx, _ = prepare_fred_fx(download_fred_fx(), raw.index[0])
+    p = premium_prev_ny(raw["adr"], raw["local"], fx, ratio=sec.ratio)["premium"].loc["2010-01":"2011-06"]
+    g = p.groupby(p.index.to_period("M"))
+    rows = [[str(m), pct(v.mean()), pct(v.min()), pct(v.max()), len(v)] for m, v in g]
+    return md(pd.DataFrame(rows, columns=["Month", "Mean UMC `prev_ny` premium", "Min", "Max", "Trading days"]))
+
+
 TABLES_LATE = [
     ("factor_main", t_factor_main), ("factor_models", t_factor_models), ("factor_betas", t_factor_betas),
     ("factor_fx_tests", t_factor_fx_tests), ("factor_rolling", t_factor_rolling),
@@ -641,5 +672,5 @@ TABLES_LATE = [
     ("step6_strategy", t_step6_strategy), ("step6_mean_reversion", t_step6_mean_reversion),
     ("step6_factors", t_step6_factors), ("step6_h5", t_step6_h5), ("step6_hedge", t_step6_hedge),
     ("step6_data_checks", t_step6_data_checks),
-    ("arbitrage_band", t_arbitrage_band), ("premium_sign", t_premium_sign),
+    ("arbitrage_band", t_arbitrage_band), ("premium_sign", t_premium_sign), ("umc_2010", t_umc_2010),
 ]

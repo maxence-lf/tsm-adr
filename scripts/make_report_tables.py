@@ -39,7 +39,7 @@ from adr_premium.data import download, download_fred_fx
 from adr_premium.premium import ADR_RATIO, asynchrony_diagnostics, premium_prev_ny, premium_same_day
 from adr_premium.stats import ar1_half_life, arma11_half_life, level_shift as _level_shift, to_weekly
 from compare_fx import GAP_THRESHOLD, compare_flagged, persistent_gaps, relative_gap
-from report_tables_steps4_7 import TABLES_LATE, issue_rows, load_late
+from report_tables_steps4_7 import TABLES_LATE, issue_rows, load_late, short_issue_rows
 
 DATA = ROOT / "data"
 TABLES = ROOT / "docs" / "tables"
@@ -771,11 +771,42 @@ def t_issues(d: dict) -> str:
 
 
 def t_issues_short(d: dict) -> str:
-    """Short version of the issues table for docs/report.md: issue and impact only."""
-    lines = t_issues(d).splitlines()
-    rows = [l.strip("|").split(" | ") for l in lines[2:]]
-    return md(pd.DataFrame([[r[0].strip(), r[3].strip()] for r in rows], columns=["Issue", "Impact (before -> after)"]),
-              ["l", "l"])
+    """Eight issues for docs/report.md, each with a before -> after readable on its own."""
+    comp = noise_comparison(d)
+    noise = comp["prev_ny"]
+    diag_f = asynchrony_diagnostics(d["same"], d["prev"])
+    _, prev_raw = yahoo_premiums(d["raw"], d["raw"]["fx"])
+    ar1_w = [model(d, l, "weekly_friday", "ar1")["half_life_days"] for l in SUBPERIODS]
+    arma_w = [model(d, l, "weekly_friday", "arma11")["half_life_days"] for l in SUBPERIODS]
+    r = mr_rows(d, "rolling_arma")
+    wk = r[(r["frequency"] == "weekly") & (r["model"] == "arma11") & ~r["excluded"]].copy()
+    wk["end"] = pd.to_datetime(wk["end"])
+    weekly_premium = to_weekly(d["prev"]["premium"])
+    shifts = pd.Series([level_shift(weekly_premium, a, b) for a, b in zip(wk["start"], wk["end"])], index=wk.index)
+    small_hl = wk.loc[shifts.abs() < SMALL_SHIFT, "half_life_days"]
+    placebo = mr_rows(d, "chow_placebo")
+    means = d["prev"]["premium"].loc[MONTHLY_START:MONTHLY_END]
+    means = means.groupby(means.index.to_period("M")).mean()
+    rows = [
+        ["a) Errors in the Yahoo exchange rate",
+         f"Minimum premium {pct(prev_raw['premium'].min())} with Yahoo -> {pct(d['prev']['premium'].min())} with the "
+         f"official FRED rate; volatility of daily changes over {NOISE_PERIOD[0]}-{NOISE_PERIOD[1]} "
+         f"{pct(noise['noise_yahoo'], 2)} -> {pct(noise['noise_fred'], 2)}"],
+        ["b) Noise from non-synchronous closes",
+         f"Daily changes read as real moves -> treated as noise: lag-1 autocorrelation "
+         f"{diag_f.loc['prev_ny', 'daily_change_autocorr_lag1']:.2f}, unchanged with the FRED rate"],
+        ["c) Naive AR(1) half-life biased downwards",
+         f"Weekly half-life within sub-periods {num(min(ar1_w))}-{num(max(ar1_w))} days (AR(1)) -> "
+         f"{num(min(arma_w))}-{num(max(arma_w))} days (signal-plus-noise ARMA(1,1))"],
+        ["d) Sub-periods chosen after looking at the data",
+         f"Point estimates by sub-period -> a range from rolling windows: median {num(wk['half_life_days'].median())} "
+         f"days over all windows, {num(small_hl.median())} days in windows without a level shift"],
+        ["e) Chow test at chosen break dates",
+         f"Break in April 2026 claimed -> not conclusive ({len(placebo)} of {len(placebo)} placebo dates also reject); "
+         f"the decline is dated from monthly means ({pct(means[pd.Period('2025-12')])} in December 2025, "
+         f"{pct(means[pd.Period('2026-01')])} in January 2026)"],
+    ] + short_issue_rows(d["late"])
+    return md(pd.DataFrame(rows, columns=["Issue", "Before -> after"]), ["l", "l"])
 
 
 def t_versions(_: dict) -> str:

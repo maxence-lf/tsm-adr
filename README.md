@@ -6,18 +6,18 @@ from 2010 to 2026 and asks why arbitrage does not close it, and who pays for it.
 
 ## Key results
 
-- **Measurement.** The two markets never trade at the same time: half of each daily
-  change in the premium reverses the next day (lag-1 autocorrelation -0.45), and Yahoo's
+- **Measurement.** The two markets never trade at the same time: close to half of each
+  daily change in the premium reverses the next day (lag-1 autocorrelation -0.45), and Yahoo's
   exchange rate contains errors, so the official FRED rate is used.
 - **Slow reversion.** Corrected for this noise with a signal-plus-noise model, the
   premium's half-life is roughly 30 to 70 trading days, not the few days of a naive AR(1).
 - **US demand.** The ADR carries more US market risk than the local share (S&P 500 beta
   1.06 against 0.85), so a long local / short ADR pair has a beta of -0.20.
-- **No profitable strategy.** A strategy with rules fixed before any backtest earns 0.360
-  before costs and 0.088 after (per 1 USD per leg); its net Sharpe ratio of 0.05 has an
-  interval of [-0.19, 0.29], costs of 82 bp per round trip absorb most of a 109 bp gross
-  edge, and the transaction tax is 39% of the costs. It loses on three other Taiwanese
-  ADRs.
+- **No profitable strategy.** A strategy with rules fixed before any backtest returns
+  2.21% a year before costs and 0.54% after, on 1 USD in each leg; its net Sharpe ratio of
+  0.05 has an interval of [-0.19, 0.29]. Costs of 82 bp per round trip absorb most of a
+  109 bp gross edge, and the transaction tax is 39% of the costs. It loses on three other
+  Taiwanese ADRs.
 - **Limits to arbitrage.** Regulation caps the creation of new ADRs, and costs and slow
   reversion imply a no-arbitrage band of about 1 to 2 points of premium, a lower bound.
 
