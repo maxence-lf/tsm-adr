@@ -35,7 +35,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from adr_premium.premium import ADR_RATIO, premium_prev_ny
+from adr_premium.premium import ADR_RATIO, premium_prev_ny, premium_same_day
 
 FINANCING_ASSUMPTION = ("Financing: the ADR short-sale proceeds fund the local purchase; no interest "
                         "income or financing cost is modelled, only the ADR borrow fee.")
@@ -65,6 +65,10 @@ class Rules:
     exit_z: float = EXIT_Z
     max_hold: int = MAX_HOLD_WEEKS
     extra_lag: int = 0  # extra trading days of execution delay on each leg
+    # "prev_ny": decision at the Taipei close on the prev_ny premium (the TSMC rules).
+    # "same_day": decision at the NY close of d on the same_day premium (NY and Taipei
+    # closes of d, FX of d); the ADR then trades at the next NY close (step 6, H5).
+    signal: str = "prev_ny"
 
 
 @dataclass(frozen=True)
@@ -124,15 +128,18 @@ def weekly_signal(premium: pd.Series, window: int = WINDOW_WEEKS) -> pd.DataFram
 # Execution dates
 # ---------------------------------------------------------------------------
 def execution_dates(decisions: pd.DatetimeIndex, ny_dates: pd.DatetimeIndex,
-                    tw_dates: pd.DatetimeIndex, extra_lag: int = 0) -> pd.DataFrame:
-    """First executable close of each leg after a decision taken at the Taipei close.
+                    tw_dates: pd.DatetimeIndex, extra_lag: int = 0,
+                    decision_at_ny_close: bool = False) -> pd.DataFrame:
+    """First executable close of each leg after a decision.
 
-    ADR: first NY date >= d (the NY close of d is ~15 h after the Taipei close of d).
-    Local: first Taipei date > d. NaT when the data ends before.
+    Decision at the Taipei close of d (default): ADR at the first NY date >= d (the NY
+    close of d is ~15 h after the Taipei close of d), local at the first Taipei date > d.
+    Decision at the NY close of d: ADR at the first NY date > d, local at the first
+    Taipei date > d (the Taipei close of d is already past). NaT when the data ends.
     """
     ny = pd.DatetimeIndex(ny_dates).sort_values()
     tw = pd.DatetimeIndex(tw_dates).sort_values()
-    i_ny = ny.searchsorted(decisions, side="left") + extra_lag
+    i_ny = ny.searchsorted(decisions, side="right" if decision_at_ny_close else "left") + extra_lag
     i_tw = tw.searchsorted(decisions, side="right") + extra_lag
 
     def pick(idx, i):
@@ -364,9 +371,15 @@ def run_backtest(adr: pd.Series, local: pd.Series, fx: pd.Series, dividends=None
                  rules: Rules = Rules(), costs: Costs = Costs(),
                  ratio: int = ADR_RATIO) -> Result:
     mkt = Market.build(adr, local, fx, dividends, ratio)
-    prem = premium_prev_ny(mkt.adr, mkt.local, mkt.fx, ratio=ratio)
+    if rules.signal == "prev_ny":
+        prem = premium_prev_ny(mkt.adr, mkt.local, mkt.fx, ratio=ratio)
+    elif rules.signal == "same_day":
+        prem = premium_same_day(mkt.adr, mkt.local, mkt.fx, ratio=ratio)
+    else:
+        raise ValueError(f"unknown signal {rules.signal!r}")
     signal = weekly_signal(prem["premium"], rules.window)
-    execs = execution_dates(signal.index, mkt.adr.index, mkt.local.index, rules.extra_lag)
+    execs = execution_dates(signal.index, mkt.adr.index, mkt.local.index, rules.extra_lag,
+                            decision_at_ny_close=rules.signal == "same_day")
     signal = signal.join(execs)
     trades = generate_trades(signal, execs, rules)
 

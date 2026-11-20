@@ -210,3 +210,50 @@ def test_trade_final_matches_the_end_of_the_daily_path():
     for _, t in res.trades.iterrows():
         pd.testing.assert_series_equal(trade_final(t, mkt, Costs()),
                                        trade_path(t, mkt, Costs()).iloc[-1], check_names=False)
+
+
+# --- H5 variant: same_day signal decided at the NY close ------------------------
+def test_same_day_signal_ignores_future_data():
+    adr, local, fx = _world(5)
+    rules = Rules(entry_z=1.0, signal="same_day")
+    cut = adr.index[900]
+    full = run_backtest(adr, local, fx, rules=rules, costs=Costs.zero())
+    rng = np.random.default_rng(7)
+    after = adr.index > cut
+    adr2, local2 = adr.copy(), local.copy()
+    adr2[after] = adr2[after] * np.exp(rng.normal(0, 0.3, after.sum()))
+    local2[after] = local2[after] * np.exp(rng.normal(0, 0.3, after.sum()))
+    alt = run_backtest(adr2, local2, fx, rules=rules, costs=Costs.zero())
+    known = full.signal.index <= cut
+    pd.testing.assert_series_equal(full.signal.loc[known, "z"], alt.signal.loc[known, "z"])
+    a, b = (r.trades[r.trades["entry_decision"] <= cut] for r in (full, alt))
+    assert len(a) > 3
+    pd.testing.assert_series_equal(a["entry_decision"].reset_index(drop=True),
+                                   b["entry_decision"].reset_index(drop=True))
+
+
+def test_same_day_legs_execute_after_the_ny_close():
+    ny = pd.bdate_range("2021-01-04", periods=60)
+    tw = ny.delete([4, 5, 20])
+    ny = ny.delete([10, 30])
+    decisions = ny.intersection(tw)[::5]
+    ex = execution_dates(decisions, ny, tw, decision_at_ny_close=True).dropna()
+    # The decision is taken at the NY close of d: both legs must trade on a later date.
+    assert (ex["adr_exec"] > ex.index).all()
+    assert (ex["local_exec"] > ex.index).all()
+
+    adr, local, fx = _world(6)
+    res = run_backtest(adr, local, fx, rules=Rules(entry_z=1.0, signal="same_day"), costs=Costs())
+    t = res.trades
+    assert len(t) > 3
+    for leg in ("adr", "local"):
+        assert (t[f"{leg}_entry_date"] > t["entry_decision"]).all()
+        assert (t[f"{leg}_exit_date"] > t["exit_decision"]).all()
+
+
+def test_same_day_signal_uses_the_same_day_premium():
+    adr, local, fx = _world(8)
+    res = run_backtest(adr, local, fx, rules=Rules(signal="same_day"), costs=Costs.zero())
+    q = np.log(adr / (5 * local / fx))  # same_day log premium on a shared calendar
+    weekly = q.groupby(q.index.to_period("W-FRI")).tail(1)
+    pd.testing.assert_series_equal(res.signal["q"], weekly, check_names=False, check_freq=False)
