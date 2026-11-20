@@ -3,8 +3,9 @@
 Measuring and modelling the premium of TSMC's NYSE-listed ADR (TSM) over its
 Taiwan-listed shares (2330.TW), and asking why arbitrage does not close it.
 
-**Status:** work in progress. Data pipeline, mean reversion and explanatory factors
-done; trading strategy next. Target completion: February 2027.
+**Status:** work in progress. Data pipeline, mean reversion, explanatory factors and
+trading strategy done; extension to other Taiwanese ADRs next. Target completion:
+February 2027.
 
 ## Research questions
 1. What drives the premium?
@@ -23,6 +24,11 @@ done; trading strategy next. Target completion: February 2027.
   0.85), so the premium rises with the S&P 500 and a long local / short ADR pair has
   a beta of about -0.20. FX is only partly passed to the premium; volumes, lagged
   factors and foreign flows give nothing conclusive.
+- **Strategy.** A short-premium trade with rules fixed a priori earns 0.360 gross but
+  0.088 net (USD per 1 USD per leg over 2010-2026, 33 trades); the net weekly Sharpe is
+  0.05 [-0.19, 0.29]. Its timing beats random entries (p = 0.01), but costs of 82 bp per
+  round trip, 39% of them Taiwan's transaction tax, absorb most of a 109 bp gross edge,
+  and a one-day execution delay turns the net result negative.
 
 ## Key methodological issue: non-synchronous prices
 Taipei closes at 05:30 UTC, New York at 20:00/21:00 UTC, so no pair of closing
@@ -58,6 +64,9 @@ noise comes from the non-synchronous closes and not from the exchange rate.
 - Exchange rate: FRED series DEXTAUS (Federal Reserve H.10, TWD per USD), recorded
   at noon New York time.
 - Yahoo TWD=X is kept for comparison only (`scripts/compare_fx.py`).
+- Dividends: ex-date cash dividends from Yahoo Finance via `yfinance`, for the
+  backtest.
+- S&P 500 and Nasdaq-100 closes from Yahoo Finance, for the factors and the hedge.
 
 Raw data is not redistributed.
 
@@ -238,6 +247,129 @@ index.
 
 ![Rolling S&P 500 and FX coefficients of the weekly premium change](figures/rolling_factor_betas.png)
 
+## Trading strategy
+Backtest of a simple mean-reversion trade on the premium, 2010-07-16 (first valid
+signal) to 2026-10-30. Code: `src/adr_premium/backtest.py`, `scripts/backtest.py`
+(results in `data/backtest_results.csv` and `data/backtest_trades.csv`),
+`src/adr_premium/robustness.py` and `scripts/backtest_robustness.py` (results in
+`data/backtest_robustness.csv`).
+
+**Rules, fixed a priori.** They were chosen before any backtest was run and are never
+tuned; the sensitivity grids below are reported without selection.
+- Signal: z-score of q = ln(1 + premium), `prev_ny` premium with the FRED rate,
+  sampled on the last Taipei date of each week; the mean and standard deviation come
+  from the 26 previous weeks only.
+- Entry when z > 1.5: "short premium", long the local share and short the ADR, with
+  1 USD in each leg.
+- Exit when z < 0, or after 26 weeks.
+- One direction only: short selling in Taiwan is more constrained (not verified),
+  while shorting the ADR is easy according to Lamont (2024).
+
+**Execution and P&L.** The signal is known at the Taipei close of the decision date.
+Each leg trades at the first close strictly after that moment: the ADR at the NY close
+of the same calendar date, the local share at the next Taipei close. The local leg is
+converted at the FRED rate of its own execution dates. The P&L is computed on these
+execution prices and on each leg's daily closes, never on changes of the `prev_ny`
+premium, which pairs a Taipei close with an ADR close already in the past and carries
+the asynchrony noise. P&L is in USD per 1 USD per leg, without compounding. Tests
+check that no decision uses later data (the bug was reintroduced to confirm the test
+fails) and that every leg trades after its decision.
+
+**Costs.** All are assumptions, not verified against an official source.
+
+| Item | Default | Source |
+|---|---:|---|
+| ADR commission | 5 bp per trade | assumption |
+| Local commission | 10 bp per trade | regulatory ceiling 0.1425%, discounts common (Taipei Times, 2000) |
+| Taiwan securities transaction tax | 30 bp on sales only | 0.3% of the sale amount (PwC; Kaizen CPA; Interactive Brokers) |
+| FX conversion | 5 bp per conversion | assumption |
+| ADR borrow fee | 0.5% a year, pro rata | assumption |
+| Withholding on local dividends | 21% | non-resident rate since 2018, 20% before (EY; Investment Taiwan) |
+
+Dividends come from Yahoo at their ex-dates; each ADR dividend matches 5 times the
+local one in USD within 4.4%. The short pays the gross ADR dividend; paying it net of
+withholding raises the net P&L from 0.088 to 0.105. Financing: the short-sale proceeds
+fund the local purchase, and no interest income or financing cost is modelled apart
+from the borrow fee.
+
+**Results.** 33 trades, 6.4 weeks on average, in position 26% of the time; 32 exits
+on z < 0, one at 26 weeks. Sharpe ratios are annualised from weekly P&L, since the
+daily marks of the two legs are asynchronous.
+
+| | Total P&L | Annual return | Sharpe (weekly) [95% CI] | Max drawdown | Winning trades |
+|---|---:|---:|---:|---:|---:|
+| Gross | 0.360 | 2.21% | 0.21 [-0.04, 0.47] | -0.23 | 79% |
+| Net | 0.088 | 0.54% | 0.05 [-0.19, 0.29] | -0.25 | 61% |
+
+- Costs, in total: Taiwan tax -0.105, local commission -0.068, ADR commission -0.034,
+  FX -0.034, borrow fee -0.021, withholding -0.010.
+- Confidence intervals: circular block bootstrap, 13-week blocks (about twice the
+  average holding period), 5,000 draws; 33% of the net draws are at or below zero.
+- Timing: with 33 trades of the same lengths placed at random dates (2,000
+  replications, same execution and costs), the actual result has a one-sided p-value
+  of 0.012 gross and 0.011 net. Random entries lose (median -0.04 gross, -0.32 net)
+  because the premium rose over the sample. The holding periods come from the signal
+  itself, so this test is somewhat favourable.
+- Sub-periods, net: 2010-2019 -0.018 (20 trades), 2020-2023 +0.113 (7),
+  2024 to April 2026 -0.035 (5), since May 2026 +0.029 (1 trade).
+- Sensitivity without selection: over entry thresholds {1.0, 1.5, 2.0} and windows
+  {13, 26, 52} weeks the net Sharpe ranges from -0.08 to 0.15; with a 3% borrow fee
+  it is -0.01.
+
+**Cost scenarios.** The break-even all-in cost is 109 bp per round trip (per 1 USD per
+leg), against 82 bp with the default costs.
+
+| Scenario | All-in cost per trade | Net P&L | Net Sharpe | Tax share of costs |
+|---|---:|---:|---:|---:|
+| Default | 82 bp | 0.088 | 0.05 | 39% |
+| Institutional (2 / 3 bp commissions, 2 bp FX, 0.25% borrow) | 52 bp | 0.187 | 0.11 | 61% |
+| Tax only | 32 bp | 0.255 | 0.15 | 100% |
+
+**Execution is fragile.** Delaying both legs by one trading day cuts the gross P&L
+from 0.360 to 0.080 and makes the net P&L -0.191. Most of the loss comes from the exit
+(gross 0.128 with a delayed exit, 0.311 with a delayed entry), and one trade (July
+2020) accounts for half of it: without it, a delayed exit costs 0.36% per trade
+(t = 1.2) instead of 0.70% (t = 1.6). This loss is not explained by the asynchrony
+gap (`same_day` minus `prev_ny` log premium) at the exit decision: the correlation of
+0.56 falls to 0.08 (p = 0.68) without the July 2020 trade.
+
+**The signal overstates the executable gap.** At the entry decision the ADR's own
+close of that day has already erased 1.5 points of the signalled premium on average
+(t = -4.7, 32 trades); at the exit the premium has already rebounded by 0.9 points
+(t = 2.1, 30 trades). About 2.4 points per trade of the apparent convergence are
+therefore asynchrony that no order could capture.
+
+**Beta hedge.** A variant hedges the pair's S&P 500 beta, estimated on the 156 weeks
+before each entry only (mean -0.16, from -0.33 to -0.01; a test with the bug
+reintroduced confirms no later data is used), with index returns standing in for a
+futures contract and 1 bp per hedge trade. The weekly volatility barely moves (10.5%
+to 10.3%) and the realised beta goes from -0.058 to -0.015; the net Sharpe rises from
+0.05 to 0.10 and the drawdown from -0.25 to -0.22 because the long index position
+gained 0.086 while the S&P 500 rose, not because risk fell.
+
+**Stress periods.** The strategy was in position for 14% of March 2020 (from 27 March,
+net +0.003) and flat in August 2024, April 2025 and January to May 2026, so these
+episodes say nothing about its resilience.
+
+**Conclusion.** A simple strategy does not survive realistic costs: the gross edge of
+about 1.1% per trade is real in timing but is consumed by 0.8% of costs, more than a
+third of them the Taiwan transaction tax, which is a quantified answer to the limits
+of arbitrage. A signal taken at the NY close, suggested by the asynchrony result, came
+out of these results and will only be tested out of sample (step 6, other Taiwanese
+ADRs).
+
+![Cumulative gross and net P&L, in-position periods shaded](figures/backtest_cumulative_pnl.png)
+
+![Total P&L of random-entry strategies against the actual result](figures/robustness_monte_carlo.png)
+
+### Cost sources
+- PwC, Taiwan corporate taxes, other taxes: https://taxsummaries.pwc.com/taiwan/corporate/other-taxes
+- Kaizen CPA, Guide to Taiwan Securities Transaction Tax: https://kaizencpa.com/knowledge/info/id/364.html
+- Interactive Brokers, Taiwan Stock Exchange fees: https://www.interactivebrokers.com/ru/accounts/fees/TAIWAN_StkFees.php?nhf=T
+- Taipei Times, 3 March 2000 (commission ceiling): https://www.taipeitimes.com/News/biz/archives/2000/03/03/0000026462
+- EY, Taiwan raises the non-resident withholding rate to 21% (2018): https://globaltaxnews.ey.com/news/2018-5118-taiwan-increases-withholding-tax-rate-for-nonresident-recipients-without-fixed-place-of-business-in-taiwan
+- Investment Taiwan, Bravo! Taiwan 2024: https://investtaiwan.nat.gov.tw/eBook/BravoTaiwan/2024ebook_en/files/basic-html/page33.html
+
 ## Reproduce
 Requires Python 3.12.
 
@@ -248,14 +380,16 @@ Requires Python 3.12.
     python scripts/build_premium.py
     python scripts/mean_reversion.py
     python scripts/factors.py
+    python scripts/backtest.py
+    python scripts/backtest_robustness.py
 
 ## Roadmap
 - [x] Data pipeline and premium construction (two alignments, unit tests)
 - [x] Asynchrony diagnostics and choice of reference definition
 - [x] Stationarity, mean reversion (ADF, AR(1), ARMA(1,1) half-life); structural breaks tested, not conclusive
 - [x] Explanatory factors (US market, FX, volumes); foreign flows not available
-- [ ] Walk-forward strategy with transaction costs, bootstrapped Sharpe
-- [ ] Extension to other Taiwanese ADRs (UMC, ASE, Chunghwa Telecom)
+- [x] Strategy backtest with rules fixed a priori, transaction costs, bootstrapped Sharpe, random-entry Monte-Carlo, beta hedge
+- [ ] Extension to other Taiwanese ADRs (UMC, ASE, Chunghwa Telecom), with an out-of-sample test of a signal taken at the NY close
 
 ## Tools
 Python, pandas, statsmodels, matplotlib, pytest. Development assisted by Claude Code.
