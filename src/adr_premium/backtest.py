@@ -347,10 +347,16 @@ def metrics(daily: pd.DataFrame, trades: pd.DataFrame, col: str = "net") -> dict
     mean, std = pnl.mean(), pnl.std()
     cum = pnl.cumsum()
     pnl_col = "net_pnl" if col == "net" else "gross_pnl"
+    # The daily marks of the two legs are asynchronous (Taipei vs NY closes), which adds
+    # day-to-day noise that reverses: weekly sums give a less noisy volatility.
+    weekly = pnl.resample("W-FRI").sum()
+    w_std = weekly.std()
     return {
         "ann_return": mean * per_year,
         "ann_vol": std * np.sqrt(per_year),
         "sharpe": mean / std * np.sqrt(per_year) if std > 0 else np.nan,
+        "ann_vol_weekly": w_std * np.sqrt(52),
+        "sharpe_weekly": weekly.mean() / w_std * np.sqrt(52) if w_std > 0 else np.nan,
         "max_drawdown": float((cum - cum.cummax()).min()) if n else np.nan,
         "total_pnl": float(pnl.sum()),
         "n_trades": len(trades),
