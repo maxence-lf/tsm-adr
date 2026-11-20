@@ -770,6 +770,14 @@ def t_issues(d: dict) -> str:
               ["l", "l", "l", "l"])
 
 
+def t_issues_short(d: dict) -> str:
+    """Short version of the issues table for docs/report.md: issue and impact only."""
+    lines = t_issues(d).splitlines()
+    rows = [l.strip("|").split(" | ") for l in lines[2:]]
+    return md(pd.DataFrame([[r[0].strip(), r[3].strip()] for r in rows], columns=["Issue", "Impact (before -> after)"]),
+              ["l", "l"])
+
+
 def t_versions(_: dict) -> str:
     rows = [["Python", sys.version.split()[0]]]
     for pkg in ("pandas", "numpy", "statsmodels", "scipy", "matplotlib", "yfinance", "pytest"):
@@ -788,7 +796,7 @@ TABLES_IN_ORDER = [
     ("fx_impact", t_fx_impact), ("closing_times", t_closing_times), ("asynchrony", t_asynchrony), ("weekdays", t_weekdays),
     ("jumps", t_jumps), ("example", t_example), ("stationarity", t_stationarity), ("ar1_naive", t_ar1_naive),
     ("simulation", t_simulation), ("arma", t_arma), ("rolling", t_rolling), ("level_shift_sim", t_level_shift_sim), ("chow", t_chow),
-    ("issues", t_issues), ("versions", t_versions), ("key_figures", t_key_figures),
+    ("issues", t_issues), ("issues_short", t_issues_short), ("versions", t_versions), ("key_figures", t_key_figures),
 ] + [(name, (lambda fn: lambda d: fn(d["late"]))(fn)) for name, fn in TABLES_LATE]
 
 
