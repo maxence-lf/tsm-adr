@@ -515,6 +515,13 @@ that no order can capture (step 5), more than D* itself. The band also ignores r
 and level shifts. It gives an order of magnitude, about 1 to 2 points, not a trading
 rule.
 
+D* is a lower bound, for two reasons. First, the deviations are measured on the
+`prev_ny` premium, which includes asynchrony noise: an observed deviation overstates
+the deviation an order can capture, so the observed deviation needed to cover costs is
+larger than D*. Second, the formula ignores risk: the premium can widen before it
+converges (Shleifer and Vishny, 1997), so an arbitrageur would require a larger
+deviation than the one that only covers expected costs.
+
 ![No-arbitrage band against the deviations of the premium](figures/arbitrage_band.png)
 
 **Conclusion.** Lamont asks why arbitrageurs do not enforce the law of one price, and
